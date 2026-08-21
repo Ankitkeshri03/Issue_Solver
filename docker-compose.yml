@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: gitissuesolver-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gitissuesolver
+      POSTGRES_USER: gitissuesolver
+      POSTGRES_PASSWORD: gitissuesolver
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitissuesolver -d gitissuesolver"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai-service:
+    build: ./ai-service
+    container_name: gitissuesolver-ai-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://gitissuesolver:gitissuesolver@postgres:5432/gitissuesolver
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      MOCK_LLM: ${MOCK_LLM:-true}
+      WORKSPACE_DIR: /workspace
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./workspace:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    container_name: gitissuesolver-backend
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gitissuesolver
+      SPRING_DATASOURCE_USERNAME: gitissuesolver
+      SPRING_DATASOURCE_PASSWORD: gitissuesolver
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-dev-only-secret-change-me}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      AI_SERVICE_URL: http://ai-service:8000
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
