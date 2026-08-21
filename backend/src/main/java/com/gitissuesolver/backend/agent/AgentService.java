@@ -25,7 +25,7 @@ public class AgentService {
 
     @Async
     public void analyzeAsync(Long ticketId) {
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow();
+        Ticket ticket = ticketRepository.findByIdWithRepo(ticketId).orElseThrow();
         ticket.setStatus(TicketStatus.ANALYZING);
         ticketRepository.save(ticket);
         step(ticketId, "reading-issue", AgentStepStatus.DONE, "Read issue #" + ticket.getGithubIssueNumber());
@@ -54,7 +54,7 @@ public class AgentService {
 
     @Async
     public void implementAsync(Long ticketId) {
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow();
+        Ticket ticket = ticketRepository.findByIdWithRepo(ticketId).orElseThrow();
         ticket.setStatus(TicketStatus.PLAN_APPROVED);
         ticketRepository.save(ticket);
 
