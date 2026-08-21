@@ -66,8 +66,8 @@ public class AgentService {
 
         try {
             ImplementResponse response = agentClient.implement(new ImplementRequest(
-                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getPlan(),
-                    ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(),
+                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), ticket.getDescription(),
+                    ticket.getPlan(), ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(),
                     branchName, ticket.getRepo().getDefaultBranch()));
 
             step(ticketId, "coding", AgentStepStatus.DONE, "Code changes applied");

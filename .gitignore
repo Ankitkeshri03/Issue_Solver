@@ -33,3 +33,6 @@ pgdata/
 
 ### Logs ###
 *.log
+
+### Python venv ###
+ai-service/venv/
