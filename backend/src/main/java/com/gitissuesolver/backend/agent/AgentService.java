@@ -71,6 +71,9 @@ public class AgentService {
                     branchName, ticket.getRepo().getDefaultBranch()));
 
             step(ticketId, "coding", AgentStepStatus.DONE, "Code changes applied");
+            if (response.diff() != null && !response.diff().isBlank()) {
+                step(ticketId, "diff", AgentStepStatus.DONE, response.diff());
+            }
             ticket.setStatus(TicketStatus.TESTING);
             ticketRepository.save(ticket);
             step(ticketId, "testing", response.success() ? AgentStepStatus.DONE : AgentStepStatus.FAILED,
