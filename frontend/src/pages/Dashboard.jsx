@@ -24,8 +24,12 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (selectedRepo) loadIssues(selectedRepo);
-  }, [selectedRepo]);
+    // GitHub issue fetching is QA-only UI (see the "Open GitHub issues" section below) --
+    // skip it entirely for other roles so a Developer's Dashboard doesn't silently burn
+    // through GitHub's 60-req/hour unauthenticated rate limit on every mount for a feature
+    // it can't even see.
+    if (selectedRepo && user?.role === "QA") loadIssues(selectedRepo);
+  }, [selectedRepo, user?.role]);
 
   async function refreshGithubStatus() {
     try {
