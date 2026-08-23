@@ -10,6 +10,7 @@ export default function TicketDetail() {
   const navigate = useNavigate();
   const [ticket, setTicket] = useState(null);
   const [developers, setDevelopers] = useState([]);
+  const [failureReason, setFailureReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -20,7 +21,17 @@ export default function TicketDetail() {
 
   async function load() {
     try {
-      setTicket(await api.getTicket(id));
+      const t = await api.getTicket(id);
+      setTicket(t);
+      // Surface why it failed, so "Retry" isn't a blind guess. The step timeline is the
+      // only place the underlying error (quota, push 403, compile error) is recorded.
+      if (t.status === "FAILED") {
+        const steps = await api.getSteps(id);
+        const lastFailed = [...steps].reverse().find((st) => st.status === "FAILED");
+        setFailureReason(lastFailed ? `${lastFailed.stepName}: ${lastFailed.message}` : "");
+      } else {
+        setFailureReason("");
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -101,6 +112,15 @@ export default function TicketDetail() {
         </section>
       )}
 
+      {ticket.status === "FAILED" && failureReason && (
+        <section className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-sm font-semibold text-red-700 mb-2">Why it failed</h2>
+          <pre className="text-xs whitespace-pre-wrap text-red-900 max-h-48 overflow-y-auto">
+            {failureReason}
+          </pre>
+        </section>
+      )}
+
       {ticket.plan && (
         <section className="bg-white border rounded-lg p-4">
           <h2 className="text-sm font-semibold text-slate-600 mb-2">AI-proposed plan</h2>
@@ -143,6 +163,37 @@ export default function TicketDetail() {
             >
               View diff &amp; PR
             </button>
+          )}
+          {/* A FAILED ticket was previously a dead end -- the only way back was a manual
+              API call. The agent endpoints are idempotent w.r.t. status, so retrying is
+              just re-invoking them. Which retry makes sense depends on how far it got:
+              no plan means analysis failed; a plan means coding/testing/push failed. */}
+          {ticket.status === "FAILED" && !ticket.plan && (
+            <button
+              disabled={busy}
+              onClick={handleAnalyze}
+              className="bg-amber-600 text-white text-sm px-4 py-2 rounded disabled:opacity-50"
+            >
+              Retry analysis
+            </button>
+          )}
+          {ticket.status === "FAILED" && ticket.plan && (
+            <>
+              <button
+                disabled={busy}
+                onClick={handleApprove}
+                className="bg-amber-600 text-white text-sm px-4 py-2 rounded disabled:opacity-50"
+              >
+                Retry implementation
+              </button>
+              <button
+                disabled={busy}
+                onClick={handleAnalyze}
+                className="bg-white border text-sm px-4 py-2 rounded disabled:opacity-50"
+              >
+                Re-analyze from scratch
+              </button>
+            </>
           )}
         </section>
       )}

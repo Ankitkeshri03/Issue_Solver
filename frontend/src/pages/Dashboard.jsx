@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [repos, setRepos] = useState([]);
   const [connectForm, setConnectForm] = useState({ owner: "", repo: "" });
   const [showManualConnect, setShowManualConnect] = useState(false);
+  const [showTokenUpdate, setShowTokenUpdate] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -55,6 +56,7 @@ export default function Dashboard() {
       const status = await api.connectGithubAccount(githubTokenInput.trim());
       setGithubStatus(status);
       setGithubTokenInput("");
+      setShowTokenUpdate(false);
       await refreshAvailableRepos();
     } catch (err) {
       setError(err.message);
@@ -113,14 +115,51 @@ export default function Dashboard() {
           {githubStatus === null ? (
             <p className="text-sm text-slate-400">Checking…</p>
           ) : githubStatus.connected ? (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-600">
-                Connected as <span className="font-medium">{githubStatus.githubLogin}</span> — repos you have
-                access to are listed below.
-              </p>
-              <button onClick={handleDisconnectGithub} className="text-xs text-red-600 hover:underline">
-                Disconnect
-              </button>
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-600">
+                  Connected as <span className="font-medium">{githubStatus.githubLogin}</span> — repos you have
+                  access to are listed below.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowTokenUpdate(!showTokenUpdate)}
+                    className="text-xs text-slate-600 hover:underline"
+                  >
+                    {showTokenUpdate ? "Cancel" : "Update token"}
+                  </button>
+                  <button onClick={handleDisconnectGithub} className="text-xs text-red-600 hover:underline">
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+              {/* Updating in place matters when rotating or re-scoping a token (e.g. adding
+                  Contents:write so pushes stop 403ing). Previously the only path was
+                  Disconnect then re-add, which also dropped every repo's stored token. */}
+              {showTokenUpdate && (
+                <form onSubmit={handleConnectGithub} className="flex gap-2 mt-3">
+                  <input
+                    className="flex-1 border rounded px-3 py-1.5 text-sm font-mono"
+                    placeholder="Paste the new token"
+                    type="password"
+                    value={githubTokenInput}
+                    onChange={(e) => setGithubTokenInput(e.target.value)}
+                    required
+                  />
+                  <button
+                    disabled={busy}
+                    className="bg-slate-900 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50"
+                  >
+                    Save token
+                  </button>
+                </form>
+              )}
+              {showTokenUpdate && (
+                <p className="text-xs text-amber-700 mt-2">
+                  After saving, click <strong>Re-sync token</strong> on each repo below — repos keep the token
+                  they were connected with until re-synced.
+                </p>
+              )}
             </div>
           ) : (
             <form onSubmit={handleConnectGithub} className="flex gap-2">
