@@ -157,11 +157,16 @@ export default function Dashboard() {
                     {r.private && <span className="text-xs text-slate-400 ml-2">private</span>}
                   </div>
                   <button
-                    disabled={busy || alreadyConnected}
+                    disabled={busy}
                     onClick={() => handleConnectFromList(r)}
+                    title={
+                      alreadyConnected
+                        ? "Re-sync this repo with your currently connected GitHub token"
+                        : "Connect this repo"
+                    }
                     className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded disabled:opacity-50"
                   >
-                    {alreadyConnected ? "Connected" : "Connect"}
+                    {alreadyConnected ? "Re-sync token" : "Connect"}
                   </button>
                 </div>
               );
