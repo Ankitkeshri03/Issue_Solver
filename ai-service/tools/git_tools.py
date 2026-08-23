@@ -66,9 +66,21 @@ def diff_against(repo_path: str, base_branch: str) -> str:
         return repo.git.diff()
 
 
-def commit_all(repo_path: str, message: str) -> str:
+def commit_all(repo_path: str, message: str, paths: list[str] | None = None) -> str:
+    """Commits the agent's changes.
+
+    `paths` should be exactly the files the coding agent wrote. Staging everything with
+    `git add -A` instead pulled in build output (target/**, node_modules/**) for repos
+    that don't gitignore it -- one real 3-file fix produced a 63-file PR full of .class
+    artifacts. Falls back to add-all only when the caller can't say what changed.
+    """
     repo = git.Repo(repo_path)
-    repo.git.add(A=True)
+    if paths:
+        existing = [p for p in paths if os.path.exists(os.path.join(repo_path, p))]
+        if existing:
+            repo.git.add("--", *existing)
+    else:
+        repo.git.add(A=True)
     diff = repo.git.diff("--cached")
     if repo.is_dirty(index=True, working_tree=False):
         repo.index.commit(message)

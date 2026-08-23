@@ -16,22 +16,29 @@ _FIXERS = {
 }
 
 
-def apply_fix(repo_path: str, issue_text: str, plan: str, relevant_files: list[str], feedback: str | None = None) -> None:
+def apply_fix(repo_path: str, issue_text: str, plan: str, relevant_files: list[str], feedback: str | None = None) -> list[str]:
+    """Applies the fix and returns the repo-relative paths actually written.
+
+    The caller commits exactly these paths -- committing with `git add -A` instead swept
+    in build output (target/**) for repos that don't gitignore it, producing PRs with
+    dozens of .class files alongside the three real source changes.
+    """
     llm = get_chat_llm()
     if llm is None:
-        _apply_mock_fix(repo_path, issue_text)
-    else:
-        _apply_llm_fix(repo_path, plan, relevant_files, feedback, llm)
+        return _apply_mock_fix(repo_path, issue_text)
+    return _apply_llm_fix(repo_path, plan, relevant_files, feedback, llm)
 
 
 # --- mock mode: deterministic, known-good patches for the 5 seeded bugs -----------------
 
-def _apply_mock_fix(repo_path: str, issue_text: str) -> None:
+def _apply_mock_fix(repo_path: str, issue_text: str) -> list[str]:
+    edited: list[str] = []
     for category in match_categories(issue_text):
-        _FIXERS[category["id"]](repo_path)
+        edited.extend(_FIXERS[category["id"]](repo_path) or [])
+    return edited
 
 
-def _fix_npe(repo_path: str) -> None:
+def _fix_npe(repo_path: str) -> list[str]:
     content = read_file(repo_path, SERVICE_FILE)
     old = (
         "    public String getEmailDomain(String email) {\n"
@@ -48,11 +55,13 @@ def _fix_npe(repo_path: str) -> None:
         "        return user.getEmail().substring(user.getEmail().indexOf('@') + 1);\n"
         "    }"
     )
-    if old in content:
-        write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    if old not in content:
+        return []
+    write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    return [SERVICE_FILE]
 
 
-def _fix_validation(repo_path: str) -> None:
+def _fix_validation(repo_path: str) -> list[str]:
     content = read_file(repo_path, SERVICE_FILE)
     old = (
         "    public User createUser(String name, String email) {\n"
@@ -69,11 +78,13 @@ def _fix_validation(repo_path: str) -> None:
         "        return userRepository.save(user);\n"
         "    }"
     )
-    if old in content:
-        write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    if old not in content:
+        return []
+    write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    return [SERVICE_FILE]
 
 
-def _fix_exception_handling(repo_path: str) -> None:
+def _fix_exception_handling(repo_path: str) -> list[str]:
     content = read_file(repo_path, SERVICE_FILE)
     old = (
         "    public User updateUserEmail(Long id, String newEmail) {\n"
@@ -93,11 +104,13 @@ def _fix_exception_handling(repo_path: str) -> None:
         "        }\n"
         "    }"
     )
-    if old in content:
-        write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    if old not in content:
+        return []
+    write_file(repo_path, SERVICE_FILE, content.replace(old, new))
+    return [SERVICE_FILE]
 
 
-def _fix_http_status(repo_path: str) -> None:
+def _fix_http_status(repo_path: str) -> list[str]:
     content = read_file(repo_path, CONTROLLER_FILE)
     old = (
         "    public ResponseEntity<User> getUser(@PathVariable Long id) {\n"
@@ -114,24 +127,29 @@ def _fix_http_status(repo_path: str) -> None:
         "        return ResponseEntity.ok(user);\n"
         "    }"
     )
-    if old in content:
-        write_file(repo_path, CONTROLLER_FILE, content.replace(old, new))
+    if old not in content:
+        return []
+    write_file(repo_path, CONTROLLER_FILE, content.replace(old, new))
+    return [CONTROLLER_FILE]
 
 
-def _fix_calculation(repo_path: str) -> None:
+def _fix_calculation(repo_path: str) -> list[str]:
     content = read_file(repo_path, PRICING_FILE)
     old = "        return price - discountPercent;"
     new = "        return price - (price * discountPercent / 100);"
-    if old in content:
-        write_file(repo_path, PRICING_FILE, content.replace(old, new))
+    if old not in content:
+        return []
+    write_file(repo_path, PRICING_FILE, content.replace(old, new))
+    return [PRICING_FILE]
 
 
 # --- real LLM mode: ask the model to rewrite each relevant file in full -----------------
 
-def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedback: str | None, llm) -> None:
+def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedback: str | None, llm) -> list[str]:
     # One LLM call per file, so cap how many files a single fix attempt rewrites: bounds
     # both free-tier quota burn and the blast radius of an automated change. relevant_files
     # is ranked by retrieval relevance, so the cap keeps the best candidates.
+    edited: list[str] = []
     for file_path in relevant_files[:MAX_FILES_TO_EDIT]:
         try:
             original = read_file(repo_path, file_path)
@@ -156,3 +174,6 @@ def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedbac
             if fixed.endswith("```"):
                 fixed = fixed.rsplit("```", 1)[0]
         write_file(repo_path, file_path, fixed)
+        edited.append(file_path)
+
+    return edited

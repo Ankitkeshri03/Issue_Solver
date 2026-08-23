@@ -43,6 +43,7 @@ def run_implement_workflow(
 ) -> ImplementResult:
     result = ImplementResult()
     feedback: Optional[str] = None
+    edited_files: list[str] = []
 
     # In mock mode the dummy repo intentionally carries several unrelated pre-seeded
     # bugs at once, so scope the run to just this issue's test(s) — a real coding agent
@@ -50,7 +51,7 @@ def run_implement_workflow(
     test_filter = test_filter_for(issue_text) if MOCK_LLM else None
 
     for attempt in range(1, MAX_TEST_RETRIES + 1):
-        apply_fix(repo_path, issue_text, plan, relevant_files, feedback)
+        edited_files = apply_fix(repo_path, issue_text, plan, relevant_files, feedback)
         passed, output = run_tests(repo_path, test_filter=test_filter)
         result.attempts = attempt
         result.test_output = output
@@ -66,7 +67,9 @@ def run_implement_workflow(
         return result
 
     git_tools.create_branch(repo_path, branch_name)
-    result.diff = git_tools.commit_all(repo_path, f"Fix issue #{issue_number} via AI agent")
+    result.diff = git_tools.commit_all(
+        repo_path, f"Fix issue #{issue_number} via AI agent", paths=edited_files
+    )
 
     pushed = git_tools.push_branch(repo_path, clone_url, branch_name, token=github_token)
     if pushed and owner and repo_name:
