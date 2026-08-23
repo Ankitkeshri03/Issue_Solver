@@ -10,8 +10,12 @@ def embed_text(text: str) -> list[float]:
         return _mock_embedding(text)
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-    embedder = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=GEMINI_API_KEY)
-    return embedder.embed_query(text)
+    # text-embedding-004 was retired by Google; gemini-embedding-001 is the current model.
+    # It defaults to 3072-dim output, so output_dimensionality is pinned to EMBEDDING_DIM
+    # (768) to match the pgvector column -- Gemini's embeddings support this truncation
+    # natively (Matryoshka representation learning), it's not a lossy hack.
+    embedder = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=GEMINI_API_KEY)
+    return embedder.embed_documents([text], output_dimensionality=EMBEDDING_DIM)[0]
 
 
 def _mock_embedding(text: str) -> list[float]:
@@ -40,4 +44,7 @@ def get_chat_llm():
         return None
     from langchain_google_genai import ChatGoogleGenerativeAI
 
-    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=GEMINI_API_KEY, temperature=0.2)
+    # gemini-1.5-flash was retired by Google. gemini-flash-latest is a rolling alias
+    # (rather than a dated model name) specifically to avoid this class of breakage
+    # recurring every time Google rotates their model lineup.
+    return ChatGoogleGenerativeAI(model="models/gemini-flash-latest", google_api_key=GEMINI_API_KEY, temperature=0.2)
