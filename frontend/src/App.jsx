@@ -4,6 +4,7 @@ import Navbar from "./components/Navbar.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import RepoDetail from "./pages/RepoDetail.jsx";
 import TicketDetail from "./pages/TicketDetail.jsx";
 import AgentLiveView from "./pages/AgentLiveView.jsx";
 import DiffAndPr from "./pages/DiffAndPr.jsx";
@@ -20,6 +21,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repos/:id"
+            element={
+              <ProtectedRoute>
+                <RepoDetail />
               </ProtectedRoute>
             }
           />

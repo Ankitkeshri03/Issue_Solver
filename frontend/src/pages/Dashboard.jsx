@@ -1,35 +1,24 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import TicketCard from "../components/TicketCard.jsx";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [githubStatus, setGithubStatus] = useState(null);
   const [githubTokenInput, setGithubTokenInput] = useState("");
   const [availableRepos, setAvailableRepos] = useState([]);
   const [repos, setRepos] = useState([]);
-  const [selectedRepo, setSelectedRepo] = useState(null);
   const [connectForm, setConnectForm] = useState({ owner: "", repo: "" });
   const [showManualConnect, setShowManualConnect] = useState(false);
-  const [issues, setIssues] = useState([]);
-  const [tickets, setTickets] = useState([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     refreshGithubStatus();
     refreshRepos();
-    refreshTickets();
   }, []);
-
-  useEffect(() => {
-    // GitHub issue fetching is QA-only UI (see the "Open GitHub issues" section below) --
-    // skip it entirely for other roles so a Developer's Dashboard doesn't silently burn
-    // through GitHub's 60-req/hour unauthenticated rate limit on every mount for a feature
-    // it can't even see.
-    if (selectedRepo && user?.role === "QA") loadIssues(selectedRepo);
-  }, [selectedRepo, user?.role]);
 
   async function refreshGithubStatus() {
     try {
@@ -52,27 +41,8 @@ export default function Dashboard() {
 
   async function refreshRepos() {
     try {
-      const data = await api.listRepos();
-      setRepos(data);
-      if (data.length && !selectedRepo) setSelectedRepo(data[0]);
+      setRepos(await api.listRepos());
     } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function refreshTickets() {
-    try {
-      setTickets(await api.listTickets());
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function loadIssues(repo) {
-    try {
-      setIssues(await api.listGithubIssues(repo.githubOwner, repo.githubRepo));
-    } catch (err) {
-      setIssues([]);
       setError(err.message);
     }
   }
@@ -110,8 +80,7 @@ export default function Dashboard() {
     try {
       const [owner, name] = repo.full_name.split("/");
       const connected = await api.connectRepo(owner, name);
-      await refreshRepos();
-      setSelectedRepo(connected);
+      navigate(`/repos/${connected.id}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -126,27 +95,11 @@ export default function Dashboard() {
     try {
       const repo = await api.connectRepo(connectForm.owner, connectForm.repo);
       setConnectForm({ owner: "", repo: "" });
-      await refreshRepos();
-      setSelectedRepo(repo);
+      navigate(`/repos/${repo.id}`);
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function handleCreateTicket(issue) {
-    setError("");
-    try {
-      await api.createTicket({
-        repoId: selectedRepo.id,
-        githubIssueNumber: issue.number,
-        title: issue.title,
-        description: issue.body,
-      });
-      await refreshTickets();
-    } catch (err) {
-      setError(err.message);
     }
   }
 
@@ -246,57 +199,20 @@ export default function Dashboard() {
 
       <section>
         <h2 className="font-semibold text-slate-700 mb-2">Connected repositories</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid gap-2">
           {repos.map((r) => (
             <button
               key={r.id}
-              onClick={() => setSelectedRepo(r)}
-              className={`text-sm px-3 py-1 rounded-full border ${
-                selectedRepo?.id === r.id ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600"
-              }`}
+              onClick={() => navigate(`/repos/${r.id}`)}
+              className="flex items-center justify-between bg-white border rounded-lg px-4 py-3 text-left hover:shadow-sm transition-shadow"
             >
-              {r.githubOwner}/{r.githubRepo}
+              <span className="text-sm font-medium text-slate-800">
+                {r.githubOwner}/{r.githubRepo}
+              </span>
+              <span className="text-xs text-slate-400">View tickets →</span>
             </button>
           ))}
           {repos.length === 0 && <p className="text-sm text-slate-400">No repos connected yet.</p>}
-        </div>
-      </section>
-
-      {selectedRepo && user?.role === "QA" && (
-        <section>
-          <h2 className="font-semibold text-slate-700 mb-2">
-            Open GitHub issues — {selectedRepo.githubOwner}/{selectedRepo.githubRepo}
-          </h2>
-          {issues.length === 0 && (
-            <p className="text-sm text-slate-400">
-              No open issues found (or this repo's connecting account has no GitHub token configured).
-            </p>
-          )}
-          <div className="space-y-2">
-            {issues.map((issue) => (
-              <div key={issue.number} className="flex items-center justify-between bg-white border rounded px-3 py-2">
-                <span className="text-sm">
-                  #{issue.number} {issue.title}
-                </span>
-                <button
-                  onClick={() => handleCreateTicket(issue)}
-                  className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded"
-                >
-                  Create ticket
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        <h2 className="font-semibold text-slate-700 mb-2">Tickets</h2>
-        <div className="grid gap-3">
-          {tickets.map((t) => (
-            <TicketCard key={t.id} ticket={t} />
-          ))}
-          {tickets.length === 0 && <p className="text-sm text-slate-400">No tickets yet.</p>}
         </div>
       </section>
     </div>
