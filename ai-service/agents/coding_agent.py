@@ -1,5 +1,6 @@
 from agents.bug_catalog import match_categories
-from llm import get_chat_llm
+from config import MAX_FILES_TO_EDIT
+from llm import get_chat_llm, invoke_chat
 from tools.file_tools import read_file, write_file
 
 SERVICE_FILE = "src/main/java/com/example/userservice/service/UserService.java"
@@ -128,7 +129,10 @@ def _fix_calculation(repo_path: str) -> None:
 # --- real LLM mode: ask the model to rewrite each relevant file in full -----------------
 
 def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedback: str | None, llm) -> None:
-    for file_path in relevant_files:
+    # One LLM call per file, so cap how many files a single fix attempt rewrites: bounds
+    # both free-tier quota burn and the blast radius of an automated change. relevant_files
+    # is ranked by retrieval relevance, so the cap keeps the best candidates.
+    for file_path in relevant_files[:MAX_FILES_TO_EDIT]:
         try:
             original = read_file(repo_path, file_path)
         except FileNotFoundError:
@@ -146,8 +150,7 @@ def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedbac
             f"Plan:\n{plan}{feedback_block}\n\n"
             f"File: {file_path}\n{original}"
         )
-        response = llm.invoke(prompt)
-        fixed = response.content.strip()
+        fixed = invoke_chat(llm, prompt, f"rewriting {file_path}").strip()
         if fixed.startswith("```"):
             fixed = fixed.split("\n", 1)[1] if "\n" in fixed else fixed
             if fixed.endswith("```"):

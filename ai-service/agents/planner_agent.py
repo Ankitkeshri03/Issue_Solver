@@ -1,4 +1,4 @@
-from llm import get_chat_llm
+from llm import get_chat_llm, invoke_chat
 
 
 def make_plan(issue_title: str, issue_description: str, retrieved: list[dict]) -> str:
@@ -14,8 +14,7 @@ def make_plan(issue_title: str, issue_description: str, retrieved: list[dict]) -
         f"Issue title: {issue_title}\nIssue description: {issue_description}\n\n"
         f"Relevant code:\n{context}"
     )
-    response = llm.invoke(prompt)
-    return response.content
+    return invoke_chat(llm, prompt, "planning")
 
 
 def _mock_plan(title: str, description: str) -> str:

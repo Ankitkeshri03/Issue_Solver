@@ -1,5 +1,6 @@
 package com.gitissuesolver.backend.config;
 
+import com.gitissuesolver.backend.agent.AiServiceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +15,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+    }
+
+    /** Carries the AI service's own error message and status straight through to the UI. */
+    @ExceptionHandler(AiServiceException.class)
+    public ResponseEntity<Map<String, String>> handleAiService(AiServiceException ex) {
+        HttpStatus status = ex.isQuotaExceeded() ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_GATEWAY;
+        return ResponseEntity.status(status).body(Map.of("error", ex.getMessage()));
     }
 
     // Thrown by both the AI-service client and the GitHub client (both use RestClient) --

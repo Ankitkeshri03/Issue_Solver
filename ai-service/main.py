@@ -1,16 +1,47 @@
+import logging
+import traceback
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from agents.issue_agent import build_query
 from agents.planner_agent import make_plan
 from agents.retrieval_agent import find_relevant_files
 from config import MOCK_LLM
+from llm import LlmQuotaError
 from tools.git_tools import clone_or_update
 from workflow import run_implement_workflow
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="AI Software Engineering Agent — AI Service")
+
+
+# Without these handlers every failure reached the UI as a bare
+# `500 Internal Server Error: "Internal Server Error"`, with the real cause only visible
+# in the uvicorn log -- which made a dead model name, a git failure, and an exhausted
+# Gemini quota all look like the same unactionable error.
+
+
+@app.exception_handler(LlmQuotaError)
+async def handle_quota_error(_request: Request, exc: LlmQuotaError):
+    return JSONResponse(status_code=429, content={"error": str(exc), "type": "llm_quota_exceeded"})
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(_request: Request, exc: Exception):
+    logger.error("Unhandled error: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": f"{type(exc).__name__}: {exc}",
+            "type": "internal_error",
+            "traceback": traceback.format_exc().splitlines()[-8:],
+        },
+    )
 
 
 class AnalyzeRequest(BaseModel):

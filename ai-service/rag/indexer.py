@@ -1,5 +1,5 @@
 from db import get_conn, vector_literal
-from llm import embed_text
+from llm import embed_texts
 from tools.file_tools import chunk_file, list_java_files, read_file
 
 
@@ -9,12 +9,17 @@ def index_repo(repo_id: int, repo_path: str) -> int:
     Returns the number of chunks stored.
     """
     java_files = list_java_files(repo_path)
-    rows = []
+    chunks: list[tuple[str, str]] = []
     for file_path in java_files:
         content = read_file(repo_path, file_path)
         for chunk in chunk_file(content):
-            embedding = embed_text(f"{file_path}\n{chunk}")
-            rows.append((file_path, chunk, embedding))
+            chunks.append((file_path, chunk))
+
+    # Embedded in batches rather than one API call per chunk -- a real repo yields
+    # hundreds of chunks, which previously meant hundreds of requests against a
+    # small per-minute quota.
+    embeddings = embed_texts([f"{path}\n{chunk}" for path, chunk in chunks])
+    rows = [(path, chunk, emb) for (path, chunk), emb in zip(chunks, embeddings)]
 
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM code_embeddings WHERE repo_id = %s", (repo_id,))
