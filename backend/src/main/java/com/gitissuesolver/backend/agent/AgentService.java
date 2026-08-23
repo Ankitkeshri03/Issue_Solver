@@ -1,11 +1,15 @@
 package com.gitissuesolver.backend.agent;
 
-import com.gitissuesolver.backend.agent.dto.*;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+import com.gitissuesolver.backend.agent.dto.AnalyzeRequest;
+import com.gitissuesolver.backend.agent.dto.AnalyzeResponse;
+import com.gitissuesolver.backend.agent.dto.ImplementRequest;
+import com.gitissuesolver.backend.agent.dto.ImplementResponse;
 import com.gitissuesolver.backend.issue.Ticket;
 import com.gitissuesolver.backend.issue.TicketRepository;
 import com.gitissuesolver.backend.issue.TicketStatus;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
 
 @Service
 public class AgentService {
