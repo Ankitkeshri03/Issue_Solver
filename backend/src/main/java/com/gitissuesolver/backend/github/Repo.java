@@ -1,5 +1,6 @@
 package com.gitissuesolver.backend.github;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -36,6 +37,14 @@ public class Repo {
 
     @Column(name = "indexed_at")
     private Instant indexedAt;
+
+    // The GitHub token of whichever user connected this repo -- used for all subsequent
+    // issue reads, branch pushes, and PR creation against it. See User.githubToken.
+    // @JsonIgnore is load-bearing: Repo is serialized directly as an API response
+    // (RepoController), so without this the token would leak to any authenticated caller.
+    @JsonIgnore
+    @Column(name = "github_token")
+    private String githubToken;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

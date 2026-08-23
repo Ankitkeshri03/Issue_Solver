@@ -39,6 +39,7 @@ def run_implement_workflow(
     relevant_files: list[str],
     branch_name: str,
     base_branch: str,
+    github_token: Optional[str] = None,
 ) -> ImplementResult:
     result = ImplementResult()
     feedback: Optional[str] = None
@@ -67,7 +68,7 @@ def run_implement_workflow(
     git_tools.create_branch(repo_path, branch_name)
     result.diff = git_tools.commit_all(repo_path, f"Fix issue #{issue_number} via AI agent")
 
-    pushed = git_tools.push_branch(repo_path, clone_url, branch_name)
+    pushed = git_tools.push_branch(repo_path, clone_url, branch_name, token=github_token)
     if pushed and owner and repo_name:
         result.pr_url = github_tools.create_pull_request(
             owner,
@@ -76,6 +77,7 @@ def run_implement_workflow(
             head=branch_name,
             base=base_branch,
             body=f"Automated fix for issue #{issue_number}.\n\nPlan:\n{plan}",
+            token=github_token,
         )
 
     return result

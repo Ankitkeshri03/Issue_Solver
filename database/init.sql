@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS users (
     email         VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role          VARCHAR(20)  NOT NULL CHECK (role IN ('QA', 'DEVELOPER')),
+    -- The user's own GitHub personal access token, set via "Connect GitHub" in the UI.
+    -- Stored as plaintext -- fine for personal/local use, NOT production-safe as-is
+    -- (would need encryption-at-rest or a secrets manager before multi-tenant deployment).
+    github_token  TEXT,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
@@ -19,6 +23,9 @@ CREATE TABLE IF NOT EXISTS repos (
     github_repo     VARCHAR(255) NOT NULL,
     clone_url       VARCHAR(500) NOT NULL,
     default_branch  VARCHAR(100) NOT NULL DEFAULT 'main',
+    -- Token of whichever user connected this repo; used for issue reads, branch
+    -- pushes, and PR creation against it. Same plaintext-storage caveat as users.github_token.
+    github_token    TEXT,
     indexed_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (github_owner, github_repo)

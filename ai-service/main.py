@@ -20,6 +20,7 @@ class AnalyzeRequest(BaseModel):
     issueDescription: Optional[str] = ""
     repoCloneUrl: str
     repoId: int
+    githubToken: Optional[str] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -37,6 +38,7 @@ class ImplementRequest(BaseModel):
     repoId: int
     branchName: str
     baseBranch: str = "main"
+    githubToken: Optional[str] = None
 
 
 class ImplementResponse(BaseModel):
@@ -65,7 +67,7 @@ def health():
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 def analyze(request: AnalyzeRequest):
-    repo_path = clone_or_update(request.repoCloneUrl)
+    repo_path = clone_or_update(request.repoCloneUrl, token=request.githubToken)
     query = build_query(request.issueTitle, request.issueDescription or "")
     retrieved = find_relevant_files(request.repoId, repo_path, query)
     plan = make_plan(request.issueTitle, request.issueDescription or "", retrieved)
@@ -74,7 +76,7 @@ def analyze(request: AnalyzeRequest):
 
 @app.post("/implement", response_model=ImplementResponse)
 def implement(request: ImplementRequest):
-    repo_path = clone_or_update(request.repoCloneUrl, request.baseBranch)
+    repo_path = clone_or_update(request.repoCloneUrl, request.baseBranch, token=request.githubToken)
     owner, repo_name = _owner_repo(request.repoCloneUrl)
     issue_text = f"{request.issueTitle or ''} {request.issueDescription or ''} {request.plan}"
 
@@ -92,6 +94,7 @@ def implement(request: ImplementRequest):
         relevant_files=relevant_files,
         branch_name=request.branchName,
         base_branch=request.baseBranch,
+        github_token=request.githubToken,
     )
 
     return ImplementResponse(

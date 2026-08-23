@@ -16,9 +16,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
     }
 
+    // Thrown by both the AI-service client and the GitHub client (both use RestClient) --
+    // the message is generic on purpose since the real cause (GitHub 404, AI service down,
+    // etc.) is already embedded in ex.getMessage().
     @ExceptionHandler(RestClientException.class)
     public ResponseEntity<Map<String, String>> handleUpstream(RestClientException ex) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                .body(Map.of("error", "AI service unavailable: " + ex.getMessage()));
+                .body(Map.of("error", "Upstream request failed: " + ex.getMessage()));
     }
 }

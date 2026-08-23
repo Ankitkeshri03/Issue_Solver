@@ -1,8 +1,10 @@
 package com.gitissuesolver.backend.github;
 
+import com.gitissuesolver.backend.auth.CustomUserDetails;
 import com.gitissuesolver.backend.github.dto.ConnectRepoRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,20 +26,46 @@ public class RepoController {
         return repoRepository.findAll();
     }
 
+    /** Repos the current user's connected GitHub account can read/write. */
+    @GetMapping("/github/available")
+    public List<GitHubRepoDto> availableRepos(@AuthenticationPrincipal CustomUserDetails principal) {
+        String token = principal.getUser().getGithubToken();
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Connect your GitHub account first, then repos you have access to will show up here.");
+        }
+        return gitHubService.listAccessibleRepos(token);
+    }
+
     @PostMapping("/connect")
-    public ResponseEntity<Repo> connect(@Valid @RequestBody ConnectRepoRequest request) {
+    public ResponseEntity<Repo> connect(@Valid @RequestBody ConnectRepoRequest request,
+                                         @AuthenticationPrincipal CustomUserDetails principal) {
+        String token = principal.getUser().getGithubToken();
+
         Repo repo = repoRepository.findByGithubOwnerAndGithubRepo(request.owner(), request.repo())
+                .map(existing -> {
+                    if (token != null && !token.isBlank()) {
+                        existing.setGithubToken(token);
+                        repoRepository.save(existing);
+                    }
+                    return existing;
+                })
                 .orElseGet(() -> repoRepository.save(Repo.builder()
                         .name(request.repo())
                         .githubOwner(request.owner())
                         .githubRepo(request.repo())
                         .cloneUrl("https://github.com/%s/%s.git".formatted(request.owner(), request.repo()))
+                        .githubToken(token)
                         .build()));
         return ResponseEntity.ok(repo);
     }
 
     @GetMapping("/{owner}/{repo}/issues")
-    public List<GitHubIssueDto> issues(@PathVariable String owner, @PathVariable String repo) {
-        return gitHubService.fetchOpenIssues(owner, repo);
+    public List<GitHubIssueDto> issues(@PathVariable String owner, @PathVariable String repo,
+                                        @AuthenticationPrincipal CustomUserDetails principal) {
+        String token = repoRepository.findByGithubOwnerAndGithubRepo(owner, repo)
+                .map(Repo::getGithubToken)
+                .filter(t -> t != null && !t.isBlank())
+                .orElse(principal.getUser().getGithubToken());
+        return gitHubService.fetchOpenIssues(owner, repo, token);
     }
 }

@@ -9,5 +9,6 @@ public record ImplementRequest(
         String repoCloneUrl,
         Long repoId,
         String branchName,
-        String baseBranch
+        String baseBranch,
+        String githubToken
 ) {}

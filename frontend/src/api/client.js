@@ -39,6 +39,12 @@ export const api = {
   connectRepo: (owner, repo) =>
     request("/api/repos/connect", { method: "POST", body: JSON.stringify({ owner, repo }) }),
   listGithubIssues: (owner, repo) => request(`/api/repos/${owner}/${repo}/issues`),
+  listAvailableGithubRepos: () => request("/api/repos/github/available"),
+
+  getGithubStatus: () => request("/api/users/me/github"),
+  connectGithubAccount: (token) =>
+    request("/api/users/me/github", { method: "POST", body: JSON.stringify({ token }) }),
+  disconnectGithubAccount: () => request("/api/users/me/github", { method: "DELETE" }),
 
   listTickets: (params = {}) => {
     const qs = new URLSearchParams(params).toString();

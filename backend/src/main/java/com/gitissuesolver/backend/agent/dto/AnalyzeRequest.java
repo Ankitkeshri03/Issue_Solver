@@ -6,5 +6,6 @@ public record AnalyzeRequest(
         String issueTitle,
         String issueDescription,
         String repoCloneUrl,
-        Long repoId
+        Long repoId,
+        String githubToken
 ) {}

@@ -34,7 +34,7 @@ public class AgentService {
             step(ticketId, "retrieval", AgentStepStatus.RUNNING, "Searching pgvector for relevant files...");
             AnalyzeResponse response = agentClient.analyze(new AnalyzeRequest(
                     ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), ticket.getDescription(),
-                    ticket.getRepo().getCloneUrl(), ticket.getRepo().getId()));
+                    ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(), ticket.getRepo().getGithubToken()));
             step(ticketId, "retrieval", AgentStepStatus.DONE,
                     "Found " + response.relevantFiles().size() + " relevant file(s): " + response.relevantFiles());
 
@@ -68,7 +68,7 @@ public class AgentService {
             ImplementResponse response = agentClient.implement(new ImplementRequest(
                     ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), ticket.getDescription(),
                     ticket.getPlan(), ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(),
-                    branchName, ticket.getRepo().getDefaultBranch()));
+                    branchName, ticket.getRepo().getDefaultBranch(), ticket.getRepo().getGithubToken()));
 
             step(ticketId, "coding", AgentStepStatus.DONE, "Code changes applied");
             if (response.diff() != null && !response.diff().isBlank()) {

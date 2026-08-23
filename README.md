@@ -54,10 +54,35 @@ demonstrated above). You need them for the real thing:
 | Variable | Where | Required for |
 |---|---|---|
 | `GEMINI_API_KEY` | `ai-service/.env` | Real LLM planning/coding (set `MOCK_LLM=false` too) |
-| `GITHUB_TOKEN` | `backend/.env` or shell env, and `ai-service/.env` | Reading real GitHub issues, pushing branches, opening PRs. Needs `repo` scope on a fine-grained or classic PAT. |
 | `JWT_SECRET` | `backend/.env` or shell env | Optional — a dev default is baked in; set your own for anything beyond local testing |
 
-Copy `ai-service/.env.example` to `ai-service/.env` and fill in what you have.
+Copy `ai-service/.env.example` to `ai-service/.env` and fill in what you have. **Never
+paste real secrets into `.env.example` itself** — it's a git-tracked template; only
+`.env` is gitignored.
+
+### GitHub access — per-user, connected in the UI (not a shared env token)
+
+Each app user connects their **own** GitHub personal access token from the Dashboard
+("Connect GitHub"), instead of the whole app sharing one token. Once connected:
+
+1. The Dashboard lists every repo that token can read/write (`GET /user/repos`), so you
+   pick from your actual repos rather than typing owner/repo blind.
+2. Clicking "Connect" on a repo stamps *that user's* token onto the `repos` row
+   (`Repo.githubToken`), and all subsequent operations against it — reading issues,
+   pushing the fix branch, opening the PR — use that stored token, propagated from the
+   backend through to the AI service per-request (never a shared env var).
+3. A `GITHUB_TOKEN` env var still exists as a **fallback only**, used solely so the
+   locally-seeded dummy `user-service` repo keeps working without anyone connecting an
+   account.
+
+Create the token at GitHub → Settings → Developer settings → **Fine-grained tokens**,
+scoped to just the repo(s) you want the agent touching, with Contents (Read/Write),
+Pull requests (Read/Write), and Issues (Read) permissions.
+
+**Known limitation:** tokens are currently stored as plaintext in Postgres
+(`users.github_token`, `repos.github_token`). That's fine for personal/local use but is
+**not production-safe** — before deploying this beyond a single-user local setup, add
+encryption-at-rest or move tokens into a proper secrets manager.
 
 ## Running it
 
