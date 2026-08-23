@@ -4,7 +4,7 @@ A GitHub issue goes in, a tested Pull Request comes out. Developer just reviews 
 
 This is a working MVP of the full pipeline described in `ROADMAP.md`: React dashboard →
 Spring Boot backend (auth, tickets, GitHub) → Python/FastAPI AI service (RAG over
-pgvector, LangGraph agents, self-correcting `mvn test` loop) → GitHub PR.
+pgvector, LangChain agents, self-correcting `mvn test` loop) → GitHub PR.
 
 ## Status: what's actually built and tested
 
@@ -16,8 +16,9 @@ Everything below has been run end-to-end on this machine, not just written:
 - **Frontend** (`frontend/`, React + Vite + Tailwind): the 4 screens — Dashboard,
   Ticket detail, Agent live view, Diff + PR. `npm run build` passes; verified live against
   the real backend (register/login, CORS, SSE).
-- **AI service** (`ai-service/`, FastAPI + LangChain + LangGraph): RAG indexing/search
-  over pgvector, planner/coding/test agents, a LangGraph state machine for
+- **AI service** (`ai-service/`, FastAPI + LangChain): RAG indexing/search over pgvector,
+  planner/coding/test agents (LangChain for the actual LLM calls — `ChatGoogleGenerativeAI`
+  / `GoogleGenerativeAIEmbeddings`), and a plain-Python retry loop (`workflow.py`) for
   code → test → retry (up to 3x) → commit → PR.
 - **Dummy `user-service`** (`workspace/user-service/`): a small Spring Boot app seeded
   with 5 intentional bugs (NPE, wrong HTTP status, missing validation, wrong calculation,

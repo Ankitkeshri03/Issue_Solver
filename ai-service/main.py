@@ -7,8 +7,8 @@ from agents.issue_agent import build_query
 from agents.planner_agent import make_plan
 from agents.retrieval_agent import find_relevant_files
 from config import MOCK_LLM
-from graph import implement_graph
 from tools.git_tools import clone_or_update
+from workflow import run_implement_workflow
 
 app = FastAPI(title="AI Software Engineering Agent — AI Service")
 
@@ -81,33 +81,24 @@ def implement(request: ImplementRequest):
     query = build_query(request.issueTitle or f"issue #{request.issueNumber}", request.issueDescription or "")
     relevant_files = [r["file_path"] for r in find_relevant_files(request.repoId, repo_path, query)]
 
-    initial_state = {
-        "repo_path": repo_path,
-        "clone_url": request.repoCloneUrl,
-        "owner": owner,
-        "repo_name": repo_name,
-        "issue_number": request.issueNumber,
-        "issue_text": issue_text,
-        "plan": request.plan,
-        "relevant_files": relevant_files,
-        "branch_name": request.branchName,
-        "base_branch": request.baseBranch,
-        "attempt": 0,
-        "feedback": None,
-        "test_passed": False,
-        "test_output": "",
-        "diff": "",
-        "pr_url": None,
-        "failure_reason": None,
-    }
-
-    final_state = implement_graph.invoke(initial_state)
+    result = run_implement_workflow(
+        repo_path=repo_path,
+        clone_url=request.repoCloneUrl,
+        owner=owner,
+        repo_name=repo_name,
+        issue_number=request.issueNumber,
+        issue_text=issue_text,
+        plan=request.plan,
+        relevant_files=relevant_files,
+        branch_name=request.branchName,
+        base_branch=request.baseBranch,
+    )
 
     return ImplementResponse(
-        success=bool(final_state.get("test_passed")),
-        prUrl=final_state.get("pr_url"),
-        diff=final_state.get("diff"),
-        testOutput=final_state.get("test_output"),
-        attempts=final_state.get("attempt", 0),
-        failureReason=final_state.get("failure_reason"),
+        success=result.test_passed,
+        prUrl=result.pr_url,
+        diff=result.diff,
+        testOutput=result.test_output,
+        attempts=result.attempts,
+        failureReason=result.failure_reason,
     )

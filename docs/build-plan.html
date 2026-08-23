@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Software Engineering Agent — Build Plan &amp; Approach</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a2233;
+    line-height: 1.55;
+    font-size: 13px;
+  }
+  h1 { font-size: 24px; margin-bottom: 2px; }
+  .subtitle { color: #5b6472; font-size: 13px; margin-top: 0; margin-bottom: 18px; }
+  h2 {
+    font-size: 16px;
+    margin-top: 28px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #1f2937;
+    color: #111827;
+  }
+  h3 {
+    font-size: 13.5px;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    color: #1f2937;
+  }
+  p { margin: 4px 0 8px; }
+  ul, ol { margin: 4px 0 8px 0; padding-left: 20px; }
+  li { margin-bottom: 3px; }
+  code {
+    background: #eef1f6;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px;
+  }
+  .phase-badge {
+    display: inline-block;
+    background: #1f2937;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 10px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0 12px;
+    font-size: 12px;
+  }
+  th, td {
+    border: 1px solid #d5dae2;
+    padding: 5px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f3f5f8; }
+  .status-done { color: #067647; font-weight: 600; }
+  .callout {
+    background: #f8fafc;
+    border-left: 3px solid #1f2937;
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 12.5px;
+  }
+  .callout.bug {
+    border-left-color: #b91c1c;
+    background: #fef2f2;
+  }
+  .toc {
+    background: #f8fafc;
+    border: 1px solid #e2e6ec;
+    border-radius: 6px;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    font-size: 12.5px;
+  }
+  .toc ol { margin: 4px 0; }
+  footer {
+    margin-top: 30px;
+    padding-top: 8px;
+    border-top: 1px solid #d5dae2;
+    font-size: 10.5px;
+    color: #8a93a3;
+  }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>AI Software Engineering Agent — Build Plan &amp; Approach</h1>
+<p class="subtitle">GitHub issue in, tested Pull Request out. How this was actually built, phase by phase, and verified at every step.</p>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li>Approach &amp; guiding principles</li>
+    <li>Phase 0 — Environment discovery &amp; scoping</li>
+    <li>Phase 1 — Foundation (backend + frontend + auth)</li>
+    <li>Phase 2 — RAG system (pgvector)</li>
+    <li>Phase 3 — AI agents (FastAPI + LangGraph)</li>
+    <li>Phase 4 — Testing &amp; self-correction loop</li>
+    <li>Phase 5 — Integration &amp; end-to-end verification</li>
+    <li>Bugs found and fixed during verification</li>
+    <li>What's not done / needs real credentials</li>
+  </ol>
+</div>
+
+<h2>1. Approach &amp; guiding principles</h2>
+<p>The roadmap specified five build phases across four systems (React frontend, Spring Boot backend, Python/FastAPI AI service, Postgres+pgvector). Rather than writing code phase-by-phase and hoping it worked, each phase was closed out with a real, running verification before moving to the next — the goal was a provably working MVP, not just code that compiles.</p>
+<ul>
+  <li><strong>Mock-LLM mode from day one:</strong> the AI service was built with a deterministic mock mode (rule-based embeddings, canned plans, known-good patches) so the entire pipeline — RAG, planning, coding, testing, retrying, PR creation — could be exercised end-to-end without any Gemini or GitHub API key.</li>
+  <li><strong>A disposable, buggy test subject:</strong> rather than testing against a real GitHub repo, a small dummy Spring Boot service (<code>user-service</code>) was seeded with 5 intentional, realistic bugs, each with a failing test. This turned "does the agent work?" into a falsifiable question with a red/green answer.</li>
+  <li><strong>Verify after every phase:</strong> each phase ends with actually starting the service(s) and hitting real endpoints/UI, not just a successful build.</li>
+  <li><strong>Git isolation:</strong> the project got its own nested git repo (never touching the user's home-directory-level repo), and the dummy buggy service got a second, independent repo, since the agent needs to create branches and commits against it.</li>
+</ul>
+
+<h2>2. Phase 0 — Environment discovery &amp; scoping</h2>
+<div class="phase-badge">SETUP</div>
+<p>Before writing anything, checked what was already on the machine to avoid redoing prior work and to know what tooling was available:</p>
+<ul>
+  <li>Found an existing Spring Boot skeleton already scaffolded at <code>~/Desktop/Git_Issue_solver/backend</code> from a prior session (per project memory) — reused it instead of starting over.</li>
+  <li>Verified Java 25 / Maven 3.9 / Python 3.9 (system) + Python 3.11 (Homebrew) / Node 25 / Docker were all installed and working.</li>
+  <li>Confirmed Docker had a free port for a dedicated Postgres container (avoided colliding with an unrelated <code>eventsphere</code> Postgres already running on 5432 — used <code>5433</code> instead).</li>
+  <li><strong>Safety check:</strong> discovered the user's home directory (<code>~</code>) is itself a git repository. Deliberately initialized a <em>new, separate</em> git repo inside <code>~/Desktop/Git_Issue_solver</code> rather than committing into the home-level repo.</li>
+</ul>
+
+<h2>3. Phase 1 — Foundation</h2>
+<div class="phase-badge">1a</div><strong>Infrastructure</strong>
+<ul>
+  <li><code>docker-compose.yml</code> defining <code>postgres</code> (pgvector/pgvector:pg16 image), <code>ai-service</code>, and <code>backend</code> services.</li>
+  <li><code>database/init.sql</code> — full schema: <code>users</code>, <code>repos</code>, <code>tickets</code>, <code>agent_steps</code>, <code>code_embeddings</code> (vector(768) column with an ivfflat cosine index).</li>
+  <li>Verified: started the Postgres container standalone, confirmed <code>pgvector</code> extension loaded and all 5 tables were created via <code>psql \dt</code>.</li>
+</ul>
+
+<div class="phase-badge">1b</div><strong>Backend — Spring Boot (Java 21)</strong>
+<ul>
+  <li><code>auth/</code> package: <code>User</code> entity + <code>Role</code> enum (QA/DEVELOPER), JWT issuing/validation (<code>JwtService</code>), <code>CustomUserDetailsService</code>, a <code>JwtAuthFilter</code> wired into Spring Security, register/login endpoints.</li>
+  <li><code>github/</code> package: <code>Repo</code> entity, a thin <code>GitHubService</code> REST client (issues, branch creation, PR creation) using Spring's <code>RestClient</code>.</li>
+  <li><code>issue/</code> package: <code>Ticket</code> entity with the full status enum (<code>OPEN → ANALYZING → PLAN_READY → PLAN_APPROVED → IMPLEMENTING → TESTING → PR_CREATED → RESOLVED/FAILED</code>), CRUD + assignment endpoints.</li>
+  <li><code>agent/</code> package: the bridge to the Python AI service — <code>AgentClient</code> (HTTP), <code>AgentService</code> (async orchestration + ticket status transitions), <code>AgentProgressPublisher</code> (SSE fan-out per ticket), <code>AgentStep</code> entity for a persisted timeline.</li>
+  <li>Global CORS config scoped to <code>localhost:*</code>, global exception handler mapping bad input → 400 and upstream AI-service failures → 502.</li>
+</ul>
+<p><strong>Verified:</strong> <code>mvn test</code> green (full Spring context boot with real Postgres). Then booted the app for real and drove it with <code>curl</code>: registered a QA and a Developer user, logged in, confirmed unauthenticated requests get <code>403</code>, connected a repo, created a ticket, assigned it — all against the live database.</p>
+
+<div class="phase-badge">1c</div><strong>Frontend — React + Vite + Tailwind</strong>
+<ul>
+  <li>Hand-scaffolded (not <code>create-react-app</code>) with Vite, Tailwind, React Router.</li>
+  <li>Auth context (<code>AuthContext.jsx</code>) backed by localStorage, a typed API client (<code>api/client.js</code>) wrapping <code>fetch</code> with auth headers.</li>
+  <li>The 4 required screens: <strong>Dashboard</strong> (repo selector + issue list + ticket list), <strong>Ticket detail</strong> (description, AI plan, assign, analyze/approve actions gated by role/status), <strong>Agent live view</strong> (SSE-driven step timeline), <strong>Diff + PR</strong> (code diff viewer, test output, PR link).</li>
+</ul>
+<p><strong>Verified:</strong> <code>npm run build</code> clean. Then started both frontend and backend together and confirmed a real CORS preflight + register call from the browser's origin succeeded end-to-end.</p>
+
+<h2>4. Phase 2 — RAG system</h2>
+<div class="phase-badge">PHASE 2</div>
+<ul>
+  <li><code>rag/indexer.py</code> — walks a repo's Java files, chunks them (line-window with overlap), embeds each chunk, stores/replaces them in <code>code_embeddings</code> keyed by <code>repo_id</code>.</li>
+  <li><code>rag/retriever.py</code> — cosine-distance nearest-neighbor search via pgvector's <code>&lt;-&gt;</code> operator.</li>
+  <li><code>llm.py</code> — the mock/real embedding switch: mock mode uses a deterministic feature-hashing bag-of-words embedding (not semantically trained, but lexically meaningful — chunks sharing vocabulary with the query rank closer), so retrieval quality is genuinely exercised without an API key.</li>
+</ul>
+<p><strong>Verified:</strong> indexed the real dummy repo, queried for "NullPointerException email domain", and confirmed pgvector returned the actual files containing that bug, ranked first — checked directly against the <code>code_embeddings</code> table in Postgres, not just the API response.</p>
+
+<h2>5. Phase 3 — AI agents (FastAPI + LangGraph)</h2>
+<div class="phase-badge">PHASE 3</div>
+<table>
+  <tr><th>Agent / module</th><th>Responsibility</th></tr>
+  <tr><td><code>issue_agent.py</code></td><td>Normalizes a GitHub issue into a RAG query string</td></tr>
+  <tr><td><code>retrieval_agent.py</code></td><td>Indexes (if needed) + searches pgvector, dedupes to one chunk per file</td></tr>
+  <tr><td><code>planner_agent.py</code></td><td>Produces a numbered fix plan — real Gemini call, or category-matched canned plan in mock mode</td></tr>
+  <tr><td><code>coding_agent.py</code></td><td>Applies the fix — real Gemini full-file rewrite, or exact known-good patch in mock mode</td></tr>
+  <tr><td><code>test_agent.py</code></td><td>Runs <code>mvn test</code> (optionally scoped to specific test classes/methods), captures output</td></tr>
+  <tr><td><code>bug_catalog.py</code></td><td>Maps issue keywords → mock fix category + scoped test filter</td></tr>
+</table>
+<p><code>graph.py</code> wires these into a <strong>LangGraph state machine</strong> for the implement phase: <code>code → test → (pass? commit → pr : retry up to 3x, feeding test failure back as context) → end</code>. <code>main.py</code> exposes <code>/analyze</code> and <code>/implement</code> over FastAPI.</p>
+<p><strong>Verified:</strong> called <code>/analyze</code> directly against the real dummy repo and got back a real plan + real ranked relevant files. This is also where a LangGraph API bug was caught early (a node returning an empty dict violates LangGraph's "must write at least one key" contract) — fixed before it reached the integration phase.</p>
+
+<h2 class="page-break">6. Phase 4 — Testing &amp; self-correction loop</h2>
+<div class="phase-badge">PHASE 4</div>
+<p>This phase needed something to actually test against, so a companion deliverable was built first:</p>
+<h3>4a. Dummy <code>user-service</code> — 5 intentional bugs</h3>
+<table>
+  <tr><th>#</th><th>Bug</th><th>Location</th></tr>
+  <tr><td>1</td><td>NullPointerException on unknown email lookup</td><td><code>UserService.getEmailDomain</code></td></tr>
+  <tr><td>2</td><td>Returns 200 instead of 404 for missing user</td><td><code>UserController.getUser</code></td></tr>
+  <tr><td>3</td><td>Accepts null/blank email with no validation</td><td><code>UserService.createUser</code></td></tr>
+  <tr><td>4</td><td>Discount subtracts raw percent instead of scaling price</td><td><code>PricingService.calculateDiscountedPrice</code></td></tr>
+  <tr><td>5</td><td>Unhandled DB exception leaks out of the service layer</td><td><code>UserService.updateUserEmail</code></td></tr>
+</table>
+<p>Each bug shipped with a corresponding JUnit test designed to fail against the buggy code, plus a markdown issue file describing it (mirroring a real GitHub issue).</p>
+<p><strong>Verified:</strong> ran <code>mvn test</code> against this repo before touching the agent — confirmed exactly 6 tests failed across all 5 bug categories (issue #5 needed two assertions). This "red baseline" is what makes the self-correction loop provable rather than assumed.</p>
+
+<h3>4b. Self-correction loop</h3>
+<div class="callout">
+  <strong>Root-cause fix mid-build:</strong> the first end-to-end run of the loop against issue #1 failed — not because the fix was wrong, but because <code>mvn test</code> runs the <em>whole</em> suite, so fixing bug #1 still left tests red for bugs #2–5. Fixed by scoping each ticket's test run to only the test(s) relevant to that issue (<code>bug_catalog.py</code>'s <code>test_filter_for</code>), mirroring how a real agent should not be blocked by unrelated pre-existing failures.
+</div>
+<p><strong>Verified:</strong> ran <code>/implement</code> against all 5 issues independently. Each one: applied its patch, ran its scoped tests, passed in 1 attempt, committed to its own <code>fix/issue-N</code> branch off a clean <code>main</code>. Confirmed via <code>git diff</code> that each patch was minimal and correct (e.g. issue #4's diff was exactly the one-line formula fix). Confirmed <code>main</code> remained untouched and still red throughout.</p>
+
+<h2>7. Phase 5 — Integration &amp; end-to-end verification</h2>
+<div class="phase-badge">FINAL</div>
+<p>With all three services individually proven, the last step was proving they work <em>together</em>, driven entirely through the real backend API (not by calling the AI service directly):</p>
+<ol>
+  <li>Registered QA + Developer users, connected the dummy repo, created a ticket for issue #2, assigned it.</li>
+  <li>Triggered <strong>Analyze</strong> via the backend → confirmed live SSE events streamed in real time, plan landed on the ticket, status reached <code>PLAN_READY</code>.</li>
+  <li>Triggered <strong>Approve</strong> → confirmed status walked through <code>PLAN_APPROVED → IMPLEMENTING → TESTING → PR_CREATED</code>, with a real diff and real <code>mvn test</code> output attached to the ticket's step timeline.</li>
+</ol>
+<p>This full-stack run surfaced two integration-only bugs invisible from any single service in isolation — see below.</p>
+
+<h2>8. Bugs found and fixed during verification</h2>
+<div class="callout bug">
+  <strong>1. Async Hibernate lazy-load crash.</strong> <code>AgentService</code>'s <code>@Async</code> methods loaded a <code>Ticket</code> by ID, then accessed its lazy <code>repo</code> association from a thread with no active Hibernate session → <code>LazyInitializationException</code>. Fixed with a <code>JOIN FETCH</code> query (<code>TicketRepository.findByIdWithRepo</code>).
+</div>
+<div class="callout bug">
+  <strong>2. JDK HttpClient vs. uvicorn.</strong> Spring's <code>RestClient</code>, backed by Java's <code>HttpClient</code>, sends an <code>Upgrade: h2c</code> cleartext-HTTP/2 negotiation header by default. uvicorn didn't understand it and silently dropped the request body — every backend→AI-service call arrived as an empty body, surfacing as a confusing <code>422 Field required</code> from FastAPI. Diagnosed by capturing the raw TCP request with <code>nc</code>. Fixed by forcing <code>HttpClient.Version.HTTP_1_1</code> in <code>AgentClient</code>.
+</div>
+<p>Both were only discoverable by running the actual full-stack loop — neither was visible from reading the code or from any single service's unit tests.</p>
+
+<h2>9. What's not done / needs real credentials</h2>
+<table>
+  <tr><th>Item</th><th>Status</th></tr>
+  <tr><td>Mock-mode pipeline (RAG, plan, code, test, retry, branch/commit)</td><td class="status-done">Verified end-to-end</td></tr>
+  <tr><td>Real Gemini planning/coding path</td><td>Implemented, not exercised live (no <code>GEMINI_API_KEY</code> in this environment)</td></tr>
+  <tr><td>Real GitHub issue fetch / branch push / PR creation</td><td>Implemented, not exercised live (no <code>GITHUB_TOKEN</code>)</td></tr>
+  <tr><td>Docker builds for <code>backend</code> and <code>ai-service</code> images</td><td>Written, not run (only local venv/mvn run modes tested)</td></tr>
+  <tr><td>Phase 5 (post-MVP polish: priority ML, eval metrics, cost tracking, sandboxing, other languages)</td><td>Out of scope per the roadmap</td></tr>
+</table>
+
+<footer>
+  AI Software Engineering Agent — build plan generated from the actual development session. Project location: ~/Desktop/Git_Issue_solver
+</footer>
+
+</body>
+</html>
