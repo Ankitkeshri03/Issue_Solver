@@ -1,3 +1,6 @@
+import os
+import re
+
 from agents.bug_catalog import match_categories
 from config import MAX_FILES_TO_EDIT
 from llm import get_chat_llm, invoke_chat
@@ -6,6 +9,9 @@ from tools.file_tools import read_file, write_file
 SERVICE_FILE = "src/main/java/com/example/userservice/service/UserService.java"
 CONTROLLER_FILE = "src/main/java/com/example/userservice/controller/UserController.java"
 PRICING_FILE = "src/main/java/com/example/userservice/service/PricingService.java"
+
+# Sentinel the model returns when a retrieved file needs no change.
+_UNCHANGED = "UNCHANGED"
 
 _FIXERS = {
     "npe": lambda repo_path: _fix_npe(repo_path),
@@ -165,6 +171,11 @@ def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedbac
             "You are a senior Java/Spring Boot engineer fixing a bug. Apply the plan below to "
             "the given file and return the COMPLETE corrected file content only — no markdown "
             "fences, no explanation.\n\n"
+            "Retrieval is fuzzy, so this file may have nothing to do with the plan. Decide first "
+            "whether THIS file needs to change. If the plan targets a different class or file, "
+            f"reply with exactly {_UNCHANGED} and nothing else. Never move a class into this file, "
+            "never rename its top-level type, and never replace unrelated code — a Java file must "
+            "keep declaring the same public type it declares now.\n\n"
             f"Plan:\n{plan}{feedback_block}\n\n"
             f"File: {file_path}\n{original}"
         )
@@ -173,7 +184,42 @@ def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedbac
             fixed = fixed.split("\n", 1)[1] if "\n" in fixed else fixed
             if fixed.endswith("```"):
                 fixed = fixed.rsplit("```", 1)[0]
-        write_file(repo_path, file_path, fixed)
+        fixed = fixed.strip()
+
+        if not fixed or fixed == _UNCHANGED:
+            continue
+        if fixed == original.strip():
+            continue
+        if not _declares_same_public_type(file_path, original, fixed):
+            # The model rewrote this file into some other class (the failure mode that
+            # clobbered AuthController.java with a second GlobalExceptionHandler). Dropping
+            # the write is always safer than committing a file that cannot compile.
+            print(f"[coding_agent] skipped {file_path}: rewrite changed the public type")
+            continue
+
+        write_file(repo_path, file_path, fixed if fixed.endswith("\n") else fixed + "\n")
         edited.append(file_path)
 
     return edited
+
+
+def _declares_same_public_type(file_path: str, original: str, fixed: str) -> bool:
+    """A Java rewrite must still declare the same public type the file declared before.
+
+    javac requires the public type to match the filename, so a rewrite that renames it
+    can never compile -- which is exactly how a plan aimed at one class ended up
+    overwriting another file with a copy of that class.
+    """
+    if not file_path.endswith(".java"):
+        return True
+    return _public_type_name(fixed) == _public_type_name(original)
+
+
+def _public_type_name(source: str) -> str | None:
+    match = re.search(
+        r"^\s*public\s+(?:final\s+|abstract\s+|sealed\s+|non-sealed\s+|static\s+)*"
+        r"(?:class|interface|enum|record)\s+(\w+)",
+        source,
+        re.MULTILINE,
+    )
+    return match.group(1) if match else None
