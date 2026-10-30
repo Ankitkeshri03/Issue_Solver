@@ -182,10 +182,3 @@ Both were only visible by actually running the full loop, not from reading the c
    landed as an empty body (`422 Field required`). Fixed by forcing
    `HttpClient.Version.HTTP_1_1` in `AgentClient`.
 
-## What's not done
-
-- Real Gemini / real GitHub push+PR path is implemented but untested live (no API keys
-  available in this environment) — only the mock-mode path was exercised.
-- Docker builds for `backend` and `ai-service` images are written but not run.
-- Phase 5 (post-MVP polish: priority prediction, eval metrics, cost tracking, Docker
-  sandbox, other languages) — intentionally out of scope per the roadmap.
