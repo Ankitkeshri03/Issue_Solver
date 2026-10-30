@@ -1,42 +1,99 @@
 import os
+import shlex
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 
-# Directories that never contain the project's own pom.xml, and are expensive to walk.
-_SKIP_DIRS = {".git", "target", "node_modules", ".mvn", "build", "dist", ".idea", "venv"}
+
+_SKIP_DIRS = {"target", "node_modules", "build", "dist", "venv", "buildSrc"}
+_GRADLE_FILES = ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts")
 
 
-def find_maven_project_dir(repo_path: str, max_depth: int = 3) -> str | None:
-    """Locates the directory containing the pom.xml Maven should run from.
+@dataclass(frozen=True)
+class BuildProject:
+    directory: Path
+    tool: str
 
-    Real-world repos are often monorepos (`backend/` + `frontend/`) where the pom.xml is
-    nested rather than at the repo root -- running `mvn test` at the root there fails with
-    "no POM in this directory". Searches breadth-first so the shallowest (usually the
-    aggregator/parent) pom wins.
+
+def _project_at(directory: Path) -> BuildProject | None:
+    # Preserve Maven behavior when a directory contains both build systems.
+    if (directory / "pom.xml").is_file():
+        return BuildProject(directory, "maven")
+    if any((directory / name).is_file() for name in _GRADLE_FILES):
+        return BuildProject(directory, "gradle")
+    return None
+
+
+def find_build_project(repo_path: str, max_depth: int = 3) -> BuildProject | None:
+    """Find the shallowest Maven/Gradle build, including multi-project Gradle roots.
+
+    Search breadth-first and sort sibling directories for deterministic selection.
+    Settings files identify Gradle roots even when only subprojects have build files.
+    Hidden/generated directories and directory symlinks are not traversed.
     """
-    if os.path.isfile(os.path.join(repo_path, "pom.xml")):
-        return repo_path
-
-    current_level = [repo_path]
-    for _ in range(max_depth):
+    current_level = [Path(repo_path).resolve()]
+    for depth in range(max_depth + 1):
         next_level = []
         for directory in current_level:
+            project = _project_at(directory)
+            if project:
+                return project
+            if depth == max_depth:
+                continue
             try:
-                entries = sorted(os.listdir(directory))
+                with os.scandir(directory) as entries:
+                    children = sorted(entries, key=lambda entry: entry.name)
+                next_level.extend(
+                    Path(entry.path) for entry in children
+                    if entry.name not in _SKIP_DIRS
+                    and not entry.name.startswith(".")
+                    and entry.is_dir(follow_symlinks=False)
+                )
             except OSError:
                 continue
-            for entry in entries:
-                if entry in _SKIP_DIRS or entry.startswith("."):
-                    continue
-                candidate = os.path.join(directory, entry)
-                if not os.path.isdir(candidate):
-                    continue
-                if os.path.isfile(os.path.join(candidate, "pom.xml")):
-                    return candidate
-                next_level.append(candidate)
-        if not next_level:
-            break
         current_level = next_level
+        if not current_level:
+            break
     return None
+
+
+def _launcher(project: BuildProject) -> list[str]:
+    executable = "mvn" if project.tool == "maven" else "gradle"
+    wrapper = project.directory / ("mvnw" if project.tool == "maven" else "gradlew")
+    if wrapper.is_file():
+        # A clone can lose its executable bit. Use the wrapper without changing files.
+        return [str(wrapper)] if os.access(wrapper, os.X_OK) else ["sh", str(wrapper)]
+    return [executable]
+
+
+def describe_test_command(repo_path: str) -> str:
+    project = find_build_project(repo_path)
+    if project is None:
+        return "the project's Maven or Gradle test command"
+    return shlex.join([*_launcher(project), "test"])
+
+
+def _gradle_test_filters(test_filter: str) -> list[str]:
+    """Translate the demo catalog's Class#method+method,OtherClass selectors."""
+    args = []
+    for selector in test_filter.split(","):
+        class_name, separator, methods = selector.strip().partition("#")
+        if not class_name:
+            continue
+        if separator:
+            patterns = [f"{class_name}.{method.strip()}" for method in methods.split("+") if method.strip()]
+        else:
+            patterns = [class_name]
+        for pattern in patterns:
+            args.extend(["--tests", pattern])
+    return args
+
+
+def _output_text(output: str | bytes | None) -> str:
+    # TimeoutExpired may contain bytes even when subprocess.run uses text=True.
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output or ""
 
 
 def run_tests(
@@ -45,29 +102,48 @@ def run_tests(
     timeout_seconds: int = 300,
     project_dir: str | None = None,
 ) -> tuple[bool, str]:
-    work_dir = project_dir or find_maven_project_dir(repo_path)
-    if work_dir is None:
+    project = _project_at(Path(project_dir).resolve()) if project_dir else find_build_project(repo_path)
+    if project is None:
+        location = project_dir or repo_path
+        search_note = "" if project_dir else " (searched up to 3 levels deep)"
         return False, (
-            f"No pom.xml found in {repo_path} (searched up to 3 levels deep). "
-            "This agent currently supports Maven-based Java projects only."
+            f"No Maven or Gradle project found in {location}{search_note}. "
+            "Expected pom.xml, build.gradle, build.gradle.kts, settings.gradle, or settings.gradle.kts. "
+            "This agent supports Java projects built with Maven or Gradle."
         )
 
-    mvnw = os.path.join(work_dir, "mvnw")
-    cmd = [mvnw if os.path.isfile(mvnw) and os.access(mvnw, os.X_OK) else "mvn", "-B", "-q", "test"]
-    if test_filter:
-        cmd.append(f"-Dtest={test_filter}")
+    cmd = _launcher(project)
+    if project.tool == "maven":
+        cmd.extend(["-B", "-q", "test"])
+        if test_filter:
+            cmd.append(f"-Dtest={test_filter}")
+    else:
+        cmd.extend(["--no-daemon", "--console=plain", "test"])
+        if test_filter:
+            cmd.extend(_gradle_test_filters(test_filter))
+
+    header = f"[{project.tool} ran in: {project.directory}]\n[command: {shlex.join(cmd)}]\n"
     try:
         result = subprocess.run(
             cmd,
-            cwd=work_dir,
+            cwd=str(project.directory),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_seconds,
         )
-    except subprocess.TimeoutExpired as e:
-        return False, f"mvn test timed out after {timeout_seconds}s\n{e.output or ''}"
+    except subprocess.TimeoutExpired as exc:
+        output = _output_text(exc.stdout) + _output_text(exc.stderr)
+        return False, header + f"Test run timed out after {timeout_seconds}s\n" + output[-8000:]
+    except OSError as exc:
+        wrapper = "mvnw" if project.tool == "maven" else "gradlew"
+        executable = "mvn" if project.tool == "maven" else "gradle"
+        return False, header + (
+            f"Could not start {project.tool}: {exc}. "
+            f"Commit a working {wrapper} wrapper or install {executable} on the AI-service host, "
+            "and ensure a compatible JDK is available."
+        )
 
     output = (result.stdout or "") + (result.stderr or "")
-    passed = result.returncode == 0
-    # trim to keep step messages/DB rows reasonable
-    return passed, f"[mvn ran in: {work_dir}]\n" + output[-8000:]
+    return result.returncode == 0, header + output[-8000:]

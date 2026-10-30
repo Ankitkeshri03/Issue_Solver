@@ -3,9 +3,11 @@ import os
 
 def list_java_files(repo_path: str) -> list[str]:
     java_files = []
-    for root, _dirs, files in os.walk(repo_path):
-        if "/target/" in root or root.endswith("/target"):
-            continue
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [
+            d for d in dirs
+            if d not in {"target", "build", "node_modules", "venv"} and not d.startswith(".")
+        ]
         for f in files:
             if f.endswith(".java"):
                 java_files.append(os.path.relpath(os.path.join(root, f), repo_path))

@@ -46,7 +46,7 @@ export default function DiffAndPr() {
 
       {testOutput && (
         <section className="bg-white border rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-slate-600 mb-2">mvn test output</h2>
+          <h2 className="text-sm font-semibold text-slate-600 mb-2">Test output</h2>
           <pre className="text-xs bg-slate-50 border rounded p-3 overflow-x-auto whitespace-pre-wrap">{testOutput}</pre>
         </section>
       )}

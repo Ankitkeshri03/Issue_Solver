@@ -81,7 +81,7 @@ public class AgentService {
             ticket.setStatus(TicketStatus.TESTING);
             ticketRepository.save(ticket);
             step(ticketId, "testing", response.success() ? AgentStepStatus.DONE : AgentStepStatus.FAILED,
-                    "mvn test (attempts=" + response.attempts() + "): " + response.testOutput());
+                    "Tests (attempts=" + response.attempts() + "): " + response.testOutput());
 
             if (response.success()) {
                 ticket.setStatus(TicketStatus.PR_CREATED);

@@ -1,6 +1,6 @@
 """Implement workflow: code -> test -> (retry up to 3x) -> commit -> PR.
 
-This is the self-correction loop from the roadmap: generate a fix, run mvn test,
+This is the self-correction loop from the roadmap: generate a fix, run Maven or Gradle tests,
 and if it fails, feed the failure back into the coding agent and try again, up to
 MAX_TEST_RETRIES times, before giving up. Plain Python control flow — the loop only
 ever goes forward or retries, so a state-machine framework added no value here.

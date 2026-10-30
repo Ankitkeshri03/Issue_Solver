@@ -104,6 +104,22 @@ lsof -nP -iTCP:8081 -sTCP:LISTEN -t | xargs kill    # swap port as needed
 
 ---
 
+## Java project requirements
+
+Connected repositories can use Maven (`pom.xml`) or Gradle (`build.gradle`,
+`build.gradle.kts`, `settings.gradle`, or `settings.gradle.kts`). The AI service
+selects the shallowest build within three directory levels and runs its `test` task.
+Gradle multi-project builds are run from the directory containing their settings file.
+
+Install a JDK compatible with the connected project on the AI-service host. Commit
+`mvnw` plus `.mvn/wrapper/`, or `gradlew` plus `gradle/wrapper/`, to use the project's
+chosen tool version. If a wrapper is absent, install `mvn` or `gradle` on that host.
+Wrappers without an executable bit are launched with `sh`. The Docker image includes
+Maven; use a committed Gradle wrapper for Gradle projects in Docker. First-time wrapper
+downloads and dependency resolution require network access.
+
+This adds Gradle builds for Java source; Kotlin/Groovy source files are not indexed.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -112,7 +128,9 @@ lsof -nP -iTCP:8081 -sTCP:LISTEN -t | xargs kill    # swap port as needed
 | `Port 8081 was already in use` | old backend still alive | `pkill -f "spring-boot:run"` |
 | `403` on every API call | stale browser token | DevTools → Application → Local Storage → clear, re-register |
 | `429 ... quota` in a step message | Gemini free-tier limit (per-minute) | wait ~1 min; it auto-retries with backoff |
-| `no POM in this directory` | repo isn't Maven, or pom is >3 levels deep | only Maven/Java repos are supported |
+| `No Maven or Gradle project found` | build files are absent or more than 3 levels deep | place the Maven/Gradle build root within the supported search depth |
+| `Could not start maven/gradle` | no usable wrapper or installed tool | commit the complete wrapper or install the corresponding tool on the AI-service host |
+| Wrapper download or Java version failure | network unavailable or incompatible JDK | allow distribution/dependency downloads and use the project's required JDK |
 | `rate limit exceeded for <ip>` | unauthenticated GitHub call | connect your GitHub token as a QA user |
 
 Errors now surface with their real cause in the UI step timeline — if you see a bare

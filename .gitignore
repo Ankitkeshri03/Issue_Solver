@@ -1,8 +1,10 @@
-### Java / Maven ###
+### Java / Maven / Gradle ###
 target/
+.gradle/
 *.class
 *.jar
 !.mvn/wrapper/maven-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 
 ### Python ###
 __pycache__/

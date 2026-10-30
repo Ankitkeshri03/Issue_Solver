@@ -1,7 +1,7 @@
 """Known bug categories seeded in the dummy user-service repo (see workspace/user-service/issues/).
 
 Used in mock mode to (a) decide which deterministic patch to apply and (b) scope the
-mvn test run to just the test(s) covering that issue — mirroring how a real coding agent
+Maven or Gradle test run to just the test(s) covering that issue — mirroring how a real coding agent
 should run only the tests relevant to the ticket, not the whole suite, so fixing issue #1
 isn't blocked by unrelated pre-existing failures in issues #2-5.
 """

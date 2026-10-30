@@ -163,7 +163,7 @@ def _apply_llm_fix(repo_path: str, plan: str, relevant_files: list[str], feedbac
             continue
 
         feedback_block = (
-            f"\n\nThe previous attempt failed mvn test with this output — fix the root cause:\n{feedback}"
+            f"\n\nThe previous test run failed with this output — fix the root cause:\n{feedback}"
             if feedback
             else ""
         )

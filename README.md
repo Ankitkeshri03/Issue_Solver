@@ -4,7 +4,7 @@ A GitHub issue goes in, a tested Pull Request comes out. Developer just reviews 
 
 This is a working MVP of the full pipeline described in `ROADMAP.md`: React dashboard →
 Spring Boot backend (auth, tickets, GitHub) → Python/FastAPI AI service (RAG over
-pgvector, LangChain agents, self-correcting `mvn test` loop) → GitHub PR.
+pgvector, LangChain agents, self-correcting Maven/Gradle test loop) → GitHub PR.
 
 ## Status: what's actually built and tested
 
@@ -44,7 +44,49 @@ This proves the *architecture* — RAG, planning, coding, test-run, self-correct
 branching, PR creation — works end-to-end without needing a Gemini key or a GitHub token
 to develop against. Flip `MOCK_LLM=false` + set `GEMINI_API_KEY` to use the real model; the
 coding agent then asks Gemini to rewrite each relevant file in full, with the previous
-`mvn test` failure fed back in on retries.
+Maven or Gradle test failure fed back in on retries.
+
+## Supported projects and test runners
+
+The agent indexes and edits **Java source** in projects built with **Maven or Gradle**.
+Gradle build scripts can use Groovy (`build.gradle`) or Kotlin DSL (`build.gradle.kts`);
+this does not add Kotlin or Groovy source-language support.
+
+| Build tool | Detection files | Test command |
+|---|---|---|
+| Maven | `pom.xml` | `./mvnw -B -q test`, or `mvn -B -q test` without a wrapper |
+| Gradle | `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts` | `./gradlew --no-daemon --console=plain test`, or `gradle --no-daemon --console=plain test` without a wrapper |
+
+The runner prefers committed wrappers, including scripts without an executable bit
+(launched through `sh`). A compatible JDK must be available. Without a wrapper, the
+corresponding build tool must be installed on the AI-service host. The Docker image
+includes Maven; Gradle projects in Docker should commit `gradlew` and `gradle/wrapper/`.
+The first wrapper run may need network access to download its distribution and dependencies.
+
+Detection searches the repository root and up to three directory levels below it,
+skipping hidden directories and generated output. The shallowest build wins; sibling
+directories are checked alphabetically. Maven wins if both build systems exist in the
+same directory. Gradle settings files keep multi-project builds at their root so `test`
+runs the subprojects' test tasks. Independent builds in one repository are not all run.
+
+Normal AI mode runs the detected build's existing test suite. Demo mode can select the
+known bug's classes/methods using Maven `-Dtest` or Gradle `--tests`. Output records the
+actual command and working directory. Failures feed the existing correction loop,
+with at most three attempts and a five-minute timeout per test run.
+
+Run runner regression tests (no database, API key, or Java build tool required):
+
+```bash
+cd ai-service
+python3.11 -m unittest discover -s tests -v
+```
+
+To also run real Maven/Gradle smoke tests, install both tools and a compatible JDK,
+then run `RUN_BUILD_INTEGRATION=1 python3.11 -m unittest discover -s tests -v`.
+These create temporary Java/JUnit projects and verify a failing suite, a passing
+class/method selection, and a corrected full suite, including both Gradle DSLs and a
+multi-project Gradle root. They download dependencies as needed and leave connected
+repositories untouched.
 
 ## Credentials you need to supply
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from agents.issue_agent import build_query
 from agents.planner_agent import make_plan
 from agents.retrieval_agent import find_relevant_files
+from agents.test_agent import describe_test_command
 from config import MOCK_LLM
 from llm import LlmQuotaError
 from tools.git_tools import clone_or_update
@@ -101,7 +102,10 @@ def analyze(request: AnalyzeRequest):
     repo_path = clone_or_update(request.repoCloneUrl, token=request.githubToken)
     query = build_query(request.issueTitle, request.issueDescription or "")
     retrieved = find_relevant_files(request.repoId, repo_path, query)
-    plan = make_plan(request.issueTitle, request.issueDescription or "", retrieved)
+    plan = make_plan(
+        request.issueTitle, request.issueDescription or "", retrieved,
+        test_command=describe_test_command(repo_path),
+    )
     return AnalyzeResponse(plan=plan, relevantFiles=[r["file_path"] for r in retrieved])
 
 
