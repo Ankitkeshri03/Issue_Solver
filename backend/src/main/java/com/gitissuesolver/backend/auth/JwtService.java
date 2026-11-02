@@ -29,7 +29,8 @@ public class JwtService {
         Date expiry = new Date(now.getTime() + expirationMs);
         return Jwts.builder()
                 .subject(user.getUsername())
-                .claims(Map.of("userId", user.getId(), "role", user.getRole().name()))
+                .claims(Map.of("userId", user.getId(), "role", user.getRole().name(),
+                        "authVersion", user.getAuthVersion()))
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -45,8 +46,14 @@ public class JwtService {
         return Role.valueOf(role);
     }
 
-    public boolean isTokenValid(String token, String username) {
-        return extractUsername(token).equals(username) && !isExpired(token);
+    public boolean isTokenValid(String token, User user) {
+        Claims claims = extractAllClaims(token);
+        Number version = claims.get("authVersion", Number.class);
+        // Tokens from before this feature had no version claim and represent version 0.
+        long tokenVersion = version == null ? 0 : version.longValue();
+        return claims.getSubject().equals(user.getUsername())
+                && claims.getExpiration().after(new Date())
+                && tokenVersion == user.getAuthVersion();
     }
 
     private boolean isExpired(String token) {

@@ -1,6 +1,7 @@
 package com.gitissuesolver.backend.github;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.gitissuesolver.backend.auth.EncryptedTokenConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -28,6 +29,12 @@ public class Repo {
     @Column(name = "github_repo", nullable = false)
     private String githubRepo;
 
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
+
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(name = "clone_url", nullable = false, length = 500)
     private String cloneUrl;
 
@@ -43,6 +50,7 @@ public class Repo {
     // @JsonIgnore is load-bearing: Repo is serialized directly as an API response
     // (RepoController), so without this the token would leak to any authenticated caller.
     @JsonIgnore
+    @Convert(converter = EncryptedTokenConverter.class)
     @Column(name = "github_token")
     private String githubToken;
 

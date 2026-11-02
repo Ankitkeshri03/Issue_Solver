@@ -1,34 +1,76 @@
 # AI Software Engineering Agent
 
-A GitHub issue goes in, a tested Pull Request comes out. Developer just reviews and merges.
+A team reports a GitHub issue, a manager assigns it, and a developer uses the AI
+agent to propose a tested pull request. Code review and QA verification complete
+the workflow.
 
 This is a working MVP of the full pipeline described in `ROADMAP.md`: React dashboard →
 Spring Boot backend (auth, tickets, GitHub) → Python/FastAPI AI service (RAG over
 pgvector, LangChain agents, self-correcting Maven/Gradle test loop) → GitHub PR.
 
+## Documentation
+
+| Guide | Contents |
+| --- | --- |
+| [Implemented improvements](docs/improvements.md) | Changes, reasons, source entry points, verification results and limits |
+| [Run and troubleshoot](RUNNING.md) | Startup/shutdown, ports, logs, CI and common failures |
+| [Company and team setup](docs/team-workflow.md) | Admin activation, invitations, role permissions and database upgrades |
+| [Gmail API setup](docs/gmail-api-setup.md) | Sender authorization and email delivery checks |
+| [Password recovery](docs/password-recovery.md) | Reset behavior, expiry and account protection |
+| [Roadmap](ROADMAP.md) | Architecture, current scope and remaining work |
+
+## Run locally
+
+With Docker, JDK 21, Python 3.11/3.12 and Node.js 22+ installed:
+
+**Upgrading an existing database?** Follow the ordered
+[migration instructions](docs/team-workflow.md#existing-installations) first.
+The startup script does not apply upgrade migrations automatically.
+
+```bash
+./start.sh
+# Open http://localhost:5173
+./stop.sh
+```
+
+Startup handles dependencies, database readiness and service health checks; logs go
+in ignored `.run/logs/`. Existing project services are reused, and shutdown preserves
+the database volume. See [RUNNING.md](RUNNING.md) for configuration, requirements,
+manual startup, and `./stop.sh --keep-db`. New companies start with
+[operator provisioning and admin activation](docs/team-workflow.md#provision-a-company);
+everyone then uses the same login page.
+
+[GitHub Actions CI](.github/workflows/ci.yml) checks backend tests/package, AI tests
+with real Maven/Gradle builds, frontend production build, and startup/setup scripts
+on pushes and pull requests. No external-service secrets or deployment are required.
+
 ## Status: what's actually built and tested
 
-Everything below has been run end-to-end on this machine, not just written:
+Implemented features and their verification:
 
-- **Backend** (`backend/`, Spring Boot 4.1 / Java 21): JWT auth with QA/DEVELOPER roles,
-  GitHub issue fetching, ticket CRUD + assignment, SSE live-progress streaming, async
-  bridge to the AI service. `mvn test` passes (full Spring context boot).
-- **Frontend** (`frontend/`, React + Vite + Tailwind): the 4 screens — Dashboard,
-  Ticket detail, Agent live view, Diff + PR. `npm run build` passes; verified live against
-  the real backend (register/login, CORS, SSE).
+- **Backend** (`backend/`, Spring Boot 4.1 / Java 21): JWT/email login, password
+  recovery, private company provisioning, invitation-only activation, workspace/project
+  memberships, four roles, delegated project team management, GitHub connections,
+  ticket reporting/priority/assignment, QA verification, activity history, SSE progress,
+  and the async AI bridge. The backend test suite passes against an isolated database.
+- **Frontend** (`frontend/`, React + Vite + Tailwind): workspace dashboard, admin/team
+  management, project/repository pages, invitation acceptance, issue detail, live
+  progress, and diff/PR review. Frontend tests and the production build pass; workspace
+  administration and QA controls were also checked in the running app.
 - **AI service** (`ai-service/`, FastAPI + LangChain): RAG indexing/search over pgvector,
   planner/coding/test agents (LangChain for the actual LLM calls — `ChatGoogleGenerativeAI`
   / `GoogleGenerativeAIEmbeddings`), and a plain-Python retry loop (`workflow.py`) for
   code → test → retry (up to 3x) → commit → PR.
-- **Dummy `user-service`** (`workspace/user-service/`): a small Spring Boot app seeded
+- **Local test fixture `user-service`** (`workspace/user-service/`): a small Spring Boot app seeded
   with 5 intentional bugs (NPE, wrong HTTP status, missing validation, wrong calculation,
   swallowed exception), each with a failing test. Verified: all 5 fail red on `main`, and
   the AI agent (in mock mode) fixes each one independently, on its own branch, in 1 attempt,
-  without touching the others.
-- **Full loop, driven through the real backend API**: register → connect repo → create
-  ticket → assign → analyze (real pgvector RAG + plan) → approve → implement (real
-  `mvn test` run, real git commit, real diff) → `PR_CREATED`. Two real integration bugs
-  were found and fixed doing this (see "Bugs found & fixed" below).
+  without touching the others in the original demo. This is a development fixture,
+  not a repository automatically available to workspace members.
+- **Real GitHub workflow**: live Gemini analysis/implementation, Maven tests, a branch
+  push and PR creation were exercised against a connected Java repository. This proves
+  the integration path, not that every proposed fix fully addresses its issue. QA must
+  verify the behavior; existing tests may not cover newly changed behavior.
 
 ## Mock LLM mode (why the loop works without any API key)
 
@@ -40,9 +82,9 @@ Everything below has been run end-to-end on this machine, not just written:
 - **Coding**: exact known-good patches for the 5 dummy bugs (string replacement against the
   real buggy source, not fake).
 
-This proves the *architecture* — RAG, planning, coding, test-run, self-correction, git
-branching, PR creation — works end-to-end without needing a Gemini key or a GitHub token
-to develop against. Flip `MOCK_LLM=false` + set `GEMINI_API_KEY` to use the real model; the
+This exercises retrieval, planning, coding, tests, retries and local git commits
+without a Gemini key. Publishing a real GitHub branch/PR still requires a valid,
+authorized repository credential. Flip `MOCK_LLM=false` + set `GEMINI_API_KEY` to use the real model; the
 coding agent then asks Gemini to rewrite each relevant file in full, with the previous
 Maven or Gradle test failure fed back in on retries.
 
@@ -90,8 +132,17 @@ repositories untouched.
 
 ## Credentials you need to supply
 
-None of these are required to run the mock-mode loop against the dummy repo (as
-demonstrated above). You need them for the real thing:
+Email/username sign-in and email-based password recovery are implemented. Unknown
+emails ask the person to request an invitation; registered emails receive a single-use reset
+link after Gmail API authorization. Follow the [Gmail API setup guide](docs/gmail-api-setup.md)
+to authorize a dedicated sender without sharing a Gmail password. Email uses HTTPS,
+including on hosts that block SMTP. See [password recovery](docs/password-recovery.md)
+for security behavior, migrations and tests. Production settings are listed in
+`backend/.env.production.example`; setup does not deploy the application.
+
+The mock-mode loop against the dummy repository is an AI-service development
+fixture and does not need a Gemini or email credential. The team UI requires authorized project
+membership and a connected GitHub repository for issue import. For live AI work:
 
 | Variable | Where | Required for |
 |---|---|---|
@@ -102,12 +153,28 @@ Copy `ai-service/.env.example` to `ai-service/.env` and fill in what you have. *
 paste real secrets into `.env.example` itself** — it's a git-tracked template; only
 `.env` is gitignored.
 
-### GitHub access — per-user, connected in the UI (not a shared env token)
+### Team roles and project access
 
-Each app user connects their **own** GitHub personal access token from the Dashboard
-("Connect GitHub"), instead of the whole app sharing one token. Once connected:
+Issue Solver supports **Workspace Admin**, **Project Manager**, **QA**, and
+**Developer**. Workspace membership controls access to a company/team; project
+memberships assign responsibilities separately for each project. Admins manage
+projects, invitations, and GitHub connections. Managers manage QA/developers within
+their own projects, prioritize issues, and assign/reassign/unassign developers;
+QA reports and verifies; assigned developers operate the AI agent. A merged PR
+awaits QA verification before an issue becomes Solved.
 
-1. The Dashboard lists every repo that token can read/write (`GET /user/repos`), so you
+See [the team workflow](docs/team-workflow.md) for setup, permissions, invitation
+links/email, and the ordered `004_workspace_roles.sql` and
+`005_company_onboarding.sql` upgrade migrations. Public signup is disabled; users
+activate through invitations and choose their own passwords.
+
+### GitHub access — connected by workspace admins
+
+Workspace admins connect their own GitHub personal access token from a project's
+**GitHub connection** section. Project members use the connection through authorized
+backend actions; the credential is never returned to team members. Once connected:
+
+1. The project page lists repositories accessible to that token (`GET /user/repos`), so you
    pick from your actual repos rather than typing owner/repo blind.
 2. Clicking "Connect" on a repo stamps *that user's* token onto the `repos` row
    (`Repo.githubToken`), and all subsequent operations against it — reading issues,
@@ -117,14 +184,18 @@ Each app user connects their **own** GitHub personal access token from the Dashb
    locally-seeded dummy `user-service` repo keeps working without anyone connecting an
    account.
 
+When replacing an admin's token, use **Save token**, then **Re-sync token** on each
+existing repository in that project. Editing the permissions of the same GitHub token
+does not require replacing it in the app. Other project members do not need to paste
+the shared repository credential into their own accounts.
+
 Create the token at GitHub → Settings → Developer settings → **Fine-grained tokens**,
 scoped to just the repo(s) you want the agent touching, with Contents (Read/Write),
 Pull requests (Read/Write), and Issues (Read) permissions.
 
-**Known limitation:** tokens are currently stored as plaintext in Postgres
-(`users.github_token`, `repos.github_token`). That's fine for personal/local use but is
-**not production-safe** — before deploying this beyond a single-user local setup, add
-encryption-at-rest or move tokens into a proper secrets manager.
+Stored tokens are encrypted with AES-GCM when `TOKEN_ENCRYPTION_KEY` is configured;
+production requires that key. Local development without a key retains plaintext
+compatibility. Keep the key and database backups private.
 
 ## Running it
 
@@ -136,9 +207,10 @@ docker compose up -d --build
 cd frontend && npm install && npm run dev   # frontend isn't containerized; run it separately
 ```
 
-Note: the ai-service and backend Docker builds haven't been run in this session (only
-tested via local venv / mvn — see "Status" above); docker-compose itself was validated
-for the postgres+pgvector service, which is up and was used for every test above.
+The recorded validation used local app processes and PostgreSQL. The backend and
+AI-service Docker images still need their own build/run verification. Compose reads
+project-root `.env` or exported variables, not `backend/.env`; see
+[email configuration](docs/password-recovery.md#real-email-through-the-gmail-https-api).
 
 ### Option B — local dev (what was actually used for all testing here)
 
@@ -163,10 +235,14 @@ cd frontend
 npm install && npm run dev
 ```
 
-Open http://localhost:5173, register a QA user and a DEVELOPER user, connect repo
-`ankitkeshri/user-service` (or any owner/repo — GitHub issue fetching needs `GITHUB_TOKEN`;
-ticket creation/assignment/analyze/implement work regardless since they operate on the
-locally-seeded `workspace/user-service`).
+Open http://localhost:5173 and follow [team setup](docs/team-workflow.md#getting-a-team-started):
+provision a company through the operator CLI, activate its admin, create a project,
+invite a manager, QA and developers, and connect GitHub
+as a workspace admin. QA reports an issue; the manager assigns a project developer;
+that developer analyzes and implements the approved plan. After code review and
+merge, QA retests and marks it solved or reopens it. Project membership grants access;
+unowned local fixtures are not exposed through the UI. The operator provisions the
+company first; there is no public registration or shared company password.
 
 ## Bugs found and fixed while proving this end-to-end
 
@@ -184,8 +260,11 @@ Both were only visible by actually running the full loop, not from reading the c
 
 ## What's not done
 
-- Real Gemini / real GitHub push+PR path is implemented but untested live (no API keys
-  available in this environment) — only the mock-mode path was exercised.
+- No measured fix-accuracy percentage, retrieval benchmark, or guarantee of complete
+  issue coverage. Targeted tests and human code/QA review are still needed.
+- The app does not merge PRs or close GitHub issues. GitHub state is refreshed from
+  the repository page; QA verification is a separate action inside the app.
+- Automated mail tests use fakes; real inbox delivery is not established by those tests.
 - Docker builds for `backend` and `ai-service` images are written but not run.
-- Phase 5 (post-MVP polish: priority prediction, eval metrics, cost tracking, Docker
-  sandbox, other languages) — intentionally out of scope per the roadmap.
+- Automatic priority prediction, evaluation metrics, cost tracking, execution
+  sandboxing and other source languages remain future work in the roadmap.

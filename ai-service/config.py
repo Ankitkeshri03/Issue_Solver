@@ -18,6 +18,13 @@ MOCK_LLM = os.getenv("MOCK_LLM", "true").lower() in ("1", "true", "yes") or not 
 WORKSPACE_DIR = os.getenv("WORKSPACE_DIR", os.path.join(os.path.dirname(__file__), "..", "workspace"))
 EMBEDDING_DIM = 768
 MAX_TEST_RETRIES = 3
+TEST_RUNNER = os.getenv("TEST_RUNNER", "local")
+AI_SERVICE_TOKEN = os.getenv("AI_SERVICE_TOKEN", "")
+APP_ENV = os.getenv("APP_ENV", "development")
+if TEST_RUNNER not in ("local", "github_actions"):
+    raise RuntimeError("TEST_RUNNER must be local or github_actions")
+if APP_ENV == "production" and not AI_SERVICE_TOKEN:
+    raise RuntimeError("AI_SERVICE_TOKEN is required in production")
 
 # Model names are env-configurable because Google retires/rotates them regularly --
 # hardcoding these previously caused hard 404 failures when text-embedding-004 and

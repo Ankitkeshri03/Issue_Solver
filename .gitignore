@@ -23,6 +23,9 @@ build/
 ### Env / secrets ###
 .env
 *.env.local
+client_secret_*.json
+google-oauth-client*.json
+.gmail-setup-*
 
 ### Editors / OS ###
 .idea/
@@ -35,6 +38,7 @@ pgdata/
 
 ### Logs ###
 *.log
+.run/
 
 ### Python venv ###
 ai-service/venv/

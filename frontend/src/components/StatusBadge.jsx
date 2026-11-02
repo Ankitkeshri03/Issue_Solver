@@ -7,15 +7,22 @@ const COLORS = {
   PLAN_APPROVED: "bg-amber-100 text-amber-700",
   IMPLEMENTING: "bg-indigo-100 text-indigo-700",
   TESTING: "bg-indigo-100 text-indigo-700",
-  PR_CREATED: "bg-emerald-100 text-emerald-700",
+  PR_CREATED: "bg-amber-100 text-amber-700",
+  AWAITING_QA: "bg-blue-100 text-blue-700",
   RESOLVED: "bg-green-200 text-green-800",
   FAILED: "bg-red-100 text-red-700",
+};
+
+const LABELS = {
+  OPEN: "Open", ANALYZING: "Analyzing", PLAN_READY: "Plan ready", PLAN_APPROVED: "Approved",
+  IMPLEMENTING: "Implementing", TESTING: "Testing", PR_CREATED: "Awaiting review",
+  AWAITING_QA: "Awaiting QA verification", RESOLVED: "Solved", FAILED: "Failed",
 };
 
 export default function StatusBadge({ status }) {
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${COLORS[status] || "bg-slate-100 text-slate-600"}`}>
-      {status}
+      {LABELS[status] || status}
     </span>
   );
 }

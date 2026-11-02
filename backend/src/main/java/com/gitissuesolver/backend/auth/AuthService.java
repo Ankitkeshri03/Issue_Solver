@@ -7,6 +7,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import java.util.Locale;
+import org.springframework.security.authentication.BadCredentialsException;
 
 @Service
 public class AuthService {
@@ -25,31 +27,17 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
-            throw new IllegalArgumentException("Username already taken");
-        }
-        if (userRepository.existsByEmail(request.email())) {
-            throw new IllegalArgumentException("Email already registered");
-        }
-
-        User user = User.builder()
-                .username(request.username())
-                .email(request.email())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .role(request.role())
-                .build();
-        user = userRepository.save(user);
-
-        String token = jwtService.generateToken(user);
-        return new AuthResponse(token, user.getId(), user.getUsername(), user.getRole());
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                "Account creation is invitation-only. Open the invitation sent by your company admin or project manager.");
     }
 
     public AuthResponse login(LoginRequest request) {
+        String identifier = request.username().trim();
+        User user = userRepository.findByUsername(identifier)
+                .or(() -> userRepository.findByEmailIgnoreCase(identifier))
+                .orElseThrow(() -> new BadCredentialsException("Invalid email/username or password"));
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.username(), request.password()));
-
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+                new UsernamePasswordAuthenticationToken(user.getUsername(), request.password()));
 
         String token = jwtService.generateToken(user);
         return new AuthResponse(token, user.getId(), user.getUsername(), user.getRole());

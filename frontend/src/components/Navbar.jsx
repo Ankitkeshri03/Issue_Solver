@@ -12,8 +12,9 @@ export default function Navbar() {
       {user && (
         <div className="flex items-center gap-4 text-sm text-slate-600">
           <span>
-            {user.username} <span className="text-slate-400">({user.role})</span>
+            {user.username}
           </span>
+          <Link to="/" className="hover:underline">Workspaces</Link>
           <button onClick={logout} className="text-red-600 hover:underline">
             Logout
           </button>

@@ -9,8 +9,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    if (stored) setUser(JSON.parse(stored));
-    setLoading(false);
+    try { if (stored) setUser(JSON.parse(stored)); } catch { localStorage.removeItem("user"); }
+    if (!localStorage.getItem("token")) { setLoading(false); return; }
+    api.me().then((current) => {
+      setUser(current); localStorage.setItem("user", JSON.stringify(current));
+    }).catch((error) => {
+      if ([401, 403].includes(error.status)) { localStorage.removeItem("token"); localStorage.removeItem("user"); setUser(null); }
+    }).finally(() => setLoading(false));
   }, []);
 
   function persist(authResponse) {
@@ -29,11 +34,6 @@ export function AuthProvider({ children }) {
     persist(res);
   }
 
-  async function register(username, email, password, role) {
-    const res = await api.register({ username, email, password, role });
-    persist(res);
-  }
-
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -41,7 +41,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: backend
   datasource:
@@ -6,17 +8,50 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:gitissuesolver}
     password: ${SPRING_DATASOURCE_PASSWORD:gitissuesolver}
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: update
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      "[mail.smtp.auth]": ${SMTP_AUTH:true}
+      "[mail.smtp.starttls.enable]": ${SMTP_STARTTLS:true}
+      "[mail.smtp.starttls.required]": ${SMTP_STARTTLS:true}
+      "[mail.smtp.ssl.enable]": ${SMTP_SSL:false}
+      "[mail.smtp.ssl.checkserveridentity]": true
+      "[mail.smtp.connectiontimeout]": 5000
+      "[mail.smtp.timeout]": 5000
+      "[mail.smtp.writetimeout]": 5000
 
 server:
-  port: 8081
+  port: ${PORT:8081}
 
 app:
+  provisioning:
+    key: ${COMPANY_PROVISIONING_KEY:}
+  agent:
+    recover-on-startup: ${RECOVER_INTERRUPTED_JOBS:true}
+  token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
+  mail:
+    provider: ${MAIL_PROVIDER:gmail_api}
+    gmail:
+      client-id: ${GMAIL_CLIENT_ID:}
+      client-secret: ${GMAIL_CLIENT_SECRET:}
+      refresh-token: ${GMAIL_REFRESH_TOKEN:}
+  cors:
+    allowed-origins: ${FRONTEND_URL:http://localhost:5173}
+  password-reset:
+    enabled: ${PASSWORD_RESET_ENABLED:false}
+    frontend-url: ${FRONTEND_URL:http://localhost:5173}
+    from: ${MAIL_FROM:}
+    ttl-minutes: 15
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-dev-only-secret-change-me}
     expiration-ms: 86400000
@@ -27,8 +62,12 @@ github:
 ai:
   service:
     url: ${AI_SERVICE_URL:http://localhost:8000}
+    token: ${AI_SERVICE_TOKEN:}
 
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:

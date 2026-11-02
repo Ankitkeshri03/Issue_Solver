@@ -6,5 +6,6 @@ public record ImplementResponse(
         String diff,
         String testOutput,
         int attempts,
-        String failureReason
+        String failureReason,
+        Boolean testsPassed
 ) {}

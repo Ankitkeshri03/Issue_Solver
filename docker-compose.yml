@@ -14,6 +14,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gitissuesolver -d gitissuesolver"]
       interval: 5s
@@ -49,6 +50,23 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-dev-only-secret-change-me}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       AI_SERVICE_URL: http://ai-service:8000
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+      PASSWORD_RESET_ENABLED: ${PASSWORD_RESET_ENABLED:-false}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-gmail_api}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      MAIL_FROM: ${MAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_SSL: ${SMTP_SSL:-false}
     ports:
       - "8081:8081"
     depends_on:

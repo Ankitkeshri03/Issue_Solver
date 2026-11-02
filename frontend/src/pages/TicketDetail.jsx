@@ -1,28 +1,31 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client.js";
-import { useAuth } from "../context/AuthContext.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 export default function TicketDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [ticket, setTicket] = useState(null);
   const [developers, setDevelopers] = useState([]);
   const [failureReason, setFailureReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [activity, setActivity] = useState([]);
+  const [report, setReport] = useState({ reproductionSteps: "", expectedBehavior: "", actualBehavior: "", severity: "MEDIUM" });
 
   useEffect(() => {
     load();
-    if (user?.role === "QA") api.listDevelopers().then(setDevelopers).catch(() => {});
   }, [id]);
 
   async function load() {
     try {
       const t = await api.getTicket(id);
       setTicket(t);
+      setReport({ reproductionSteps: t.reproductionSteps || "", expectedBehavior: t.expectedBehavior || "", actualBehavior: t.actualBehavior || "", severity: t.severity || "MEDIUM" });
+      if (t.permissions?.canAssign) setDevelopers(await api.listDevelopers(t.projectId));
+      setActivity(await api.ticketActivity(id));
       // Surface why it failed, so "Retry" isn't a blind guess. The step timeline is the
       // only place the underlying error (quota, push 403, compile error) is recorded.
       if (t.status === "FAILED") {
@@ -39,12 +42,12 @@ export default function TicketDetail() {
 
   async function handleAssign(e) {
     const developerId = e.target.value;
-    if (!developerId) return;
+    setBusy(true); setError("");
     try {
-      setTicket(await api.assignTicket(id, Number(developerId)));
+      setTicket(await (developerId ? api.assignTicket(id, Number(developerId)) : api.unassignTicket(id)));
     } catch (err) {
       setError(err.message);
-    }
+    } finally { setBusy(false); }
   }
 
   async function handleAnalyze() {
@@ -73,7 +76,13 @@ export default function TicketDetail() {
 
   if (!ticket) return <p className="text-sm text-slate-400">{error || "Loading..."}</p>;
 
-  const isAssignedDeveloper = user?.role === "DEVELOPER" && ticket.assignedToId === user.id;
+  const isAssignedDeveloper = ticket.permissions?.canDevelop;
+
+  async function update(fn) {
+    setBusy(true); setError("");
+    try { setTicket(await fn()); setActivity(await api.ticketActivity(id)); setNotes(""); }
+    catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
 
   return (
     <div className="space-y-6">
@@ -94,13 +103,14 @@ export default function TicketDetail() {
         <p className="text-sm whitespace-pre-wrap text-slate-700">{ticket.description || "—"}</p>
       </section>
 
-      {user?.role === "QA" && (
+      {ticket.permissions?.canAssign && (
         <section className="bg-white border rounded-lg p-4">
           <h2 className="text-sm font-semibold text-slate-600 mb-2">Assign to developer</h2>
           <select
             className="border rounded px-3 py-1.5 text-sm"
             value={ticket.assignedToId || ""}
             onChange={handleAssign}
+            disabled={busy}
           >
             <option value="">Unassigned</option>
             {developers.map((d) => (
@@ -111,6 +121,32 @@ export default function TicketDetail() {
           </select>
         </section>
       )}
+
+      <section className="bg-white border rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-600">Priority and severity</h2>
+        <div className="flex gap-5 text-sm"><label>Priority {ticket.permissions?.canPrioritize ? <select aria-label="Issue priority" disabled={busy} className="border rounded px-2 py-1 ml-2" value={ticket.priority} onChange={(e) => update(() => api.setPriority(id, e.target.value))}>{["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((value) => <option key={value}>{value}</option>)}</select> : ticket.priority}</label><p>Severity: {ticket.severity}</p></div>
+      </section>
+
+      <section className="bg-white border rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-600">QA bug report</h2>
+        {ticket.permissions?.canReport ? <form onSubmit={(event) => { event.preventDefault(); update(() => api.updateReport(id, report)); }} className="space-y-3">
+          {[["reproductionSteps", "Steps to reproduce"], ["expectedBehavior", "Expected behavior"], ["actualBehavior", "Actual behavior"]].map(([field, label]) => <label key={field} className="block text-sm">{label}<textarea aria-label={label} required maxLength={6000} className="block w-full border rounded px-3 py-2 mt-1" value={report[field]} onChange={(e) => setReport({ ...report, [field]: e.target.value })} /></label>)}
+          <select aria-label="Bug severity" className="border rounded px-3 py-2 text-sm" value={report.severity} onChange={(e) => setReport({ ...report, severity: e.target.value })}>{["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((value) => <option key={value}>{value}</option>)}</select>
+          <button disabled={busy} className="block bg-slate-900 text-white text-sm rounded px-3 py-2 disabled:opacity-50">Save bug report</button>
+        </form> : <div className="space-y-3 text-sm">{[["reproductionSteps", "Steps to reproduce"], ["expectedBehavior", "Expected behavior"], ["actualBehavior", "Actual behavior"]].map(([field, label]) => <div key={field}><h3 className="font-medium">{label}</h3><p className="whitespace-pre-wrap text-slate-600">{ticket[field] || "Not provided yet."}</p></div>)}</div>}
+      </section>
+
+      {(ticket.permissions?.canVerify || ticket.permissions?.canReopen) && <section className="bg-white border rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-600">QA verification</h2><p className="text-sm text-slate-500">Retest the reported behavior and record your findings before marking the issue solved.</p>
+        <form onSubmit={(event) => { event.preventDefault(); update(() => api.verifyTicket(id, notes)); }} className="space-y-3">
+          <textarea aria-label="QA verification notes" required maxLength={6000} placeholder="What did you retest? What was the result?" className="w-full border rounded px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div className="flex gap-3">{ticket.permissions.canVerify && <button disabled={busy || !notes.trim()} className="bg-green-700 text-white text-sm rounded px-3 py-2 disabled:opacity-50">Verify &amp; mark solved</button>}
+            {ticket.permissions.canReopen && <button type="button" disabled={busy || !notes.trim()} onClick={() => update(() => api.reopenTicket(id, notes))} className="bg-amber-600 text-white text-sm rounded px-3 py-2 disabled:opacity-50">Reopen for developer</button>}</div>
+        </form>
+      </section>}
+      {ticket.qaVerifiedAt && <p className="text-sm text-green-700">QA verified on {new Date(ticket.qaVerifiedAt).toLocaleString()}: {ticket.qaNotes}</p>}
+
+      <div className="flex flex-wrap gap-4 text-sm"><Link className="text-slate-500 underline" to={`/tickets/${id}/diff`}>View diff &amp; PR</Link><Link className="text-slate-500 underline" to={`/tickets/${id}/live`}>View agent progress</Link><Link className="text-slate-500 underline" to={`/repos/${ticket.repoId}`}>Back to issues</Link></div>
 
       {ticket.status === "FAILED" && failureReason && (
         <section className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -197,6 +233,7 @@ export default function TicketDetail() {
           )}
         </section>
       )}
+      {activity.length > 0 && <section className="bg-white border rounded-lg p-4 space-y-3"><h2 className="text-sm font-semibold text-slate-600">Issue activity</h2>{activity.map((item) => <div key={item.id} className="border-t pt-2 text-sm"><p className="text-slate-500 text-xs">{item.actorUsername} · {new Date(item.createdAt).toLocaleString()}</p><p className="whitespace-pre-wrap">{item.message}</p></div>)}</section>}
     </div>
   );
 }

@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: ${TEST_DATABASE_URL:jdbc:postgresql://localhost:5433/gitissuesolver_test}
+    username: ${TEST_DATABASE_USERNAME:gitissuesolver}
+    password: ${TEST_DATABASE_PASSWORD:gitissuesolver}
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+app:
+  agent:
+    recover-on-startup: false
+  password-reset:
+    enabled: false
+management:
+  health:
+    mail:
+      enabled: false

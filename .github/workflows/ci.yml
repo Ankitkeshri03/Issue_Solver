@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: gitissuesolver_test
+          POSTGRES_USER: gitissuesolver
+          POSTGRES_PASSWORD: gitissuesolver
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gitissuesolver -d gitissuesolver_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SPRING_PROFILES_ACTIVE: test
+      TEST_DATABASE_URL: jdbc:postgresql://localhost:5432/gitissuesolver_test
+      TEST_DATABASE_USERNAME: gitissuesolver
+      TEST_DATABASE_PASSWORD: gitissuesolver
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Test and package backend
+        working-directory: backend
+        run: sh ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Save failed test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ai:
+    name: AI tests and real Maven/Gradle builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MOCK_LLM: 'true'
+      GEMINI_API_KEY: ''
+      GITHUB_TOKEN: ''
+      TEST_RUNNER: local
+      RUN_BUILD_INTEGRATION: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: '8.10'
+      - name: Install AI dependencies
+        run: python -m pip install -r ai-service/requirements.txt
+      - name: Check Java build tools
+        run: |
+          mvn --version
+          gradle --version
+      - name: Check AI application imports without API calls
+        working-directory: ai-service
+        run: python -c "import main"
+      - name: Run AI unit and Java build integration tests
+        working-directory: ai-service
+        run: python -m unittest discover -s tests -v
+
+  frontend:
+    name: Frontend production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Test live progress recovery
+        working-directory: frontend
+        run: npm test
+
+  tooling:
+    name: Startup and Gmail setup scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - name: Check shell entry points
+        run: |
+          sh -n start.sh stop.sh
+          ./start.sh --help
+          ./stop.sh --help
+      - name: Test service lifecycle and process safety
+        run: python -m unittest discover -s scripts/tests -v
+      - name: Test Gmail authorization helper
+        run: python -m unittest discover -s backend/scripts -p 'test_*.py' -v

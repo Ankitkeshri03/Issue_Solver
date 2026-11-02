@@ -37,7 +37,7 @@ public class AgentService {
         try {
             step(ticketId, "retrieval", AgentStepStatus.RUNNING, "Searching pgvector for relevant files...");
             AnalyzeResponse response = agentClient.analyze(new AnalyzeRequest(
-                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), ticket.getDescription(),
+                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), issueDescription(ticket),
                     ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(), ticket.getRepo().getGithubToken()));
             step(ticketId, "retrieval", AgentStepStatus.DONE,
                     "Found " + response.relevantFiles().size() + " relevant file(s): " + response.relevantFiles());
@@ -62,7 +62,8 @@ public class AgentService {
         ticket.setStatus(TicketStatus.PLAN_APPROVED);
         ticketRepository.save(ticket);
 
-        String branchName = "fix/issue-" + ticket.getGithubIssueNumber();
+        String branchName = "fix/issue-" + ticket.getGithubIssueNumber() + "-"
+                + java.util.UUID.randomUUID().toString().substring(0, 8);
         ticket.setBranchName(branchName);
         ticket.setStatus(TicketStatus.IMPLEMENTING);
         ticketRepository.save(ticket);
@@ -70,7 +71,7 @@ public class AgentService {
 
         try {
             ImplementResponse response = agentClient.implement(new ImplementRequest(
-                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), ticket.getDescription(),
+                    ticket.getId(), ticket.getGithubIssueNumber(), ticket.getTitle(), issueDescription(ticket),
                     ticket.getPlan(), ticket.getRepo().getCloneUrl(), ticket.getRepo().getId(),
                     branchName, ticket.getRepo().getDefaultBranch(), ticket.getRepo().getGithubToken()));
 
@@ -80,7 +81,8 @@ public class AgentService {
             }
             ticket.setStatus(TicketStatus.TESTING);
             ticketRepository.save(ticket);
-            step(ticketId, "testing", response.success() ? AgentStepStatus.DONE : AgentStepStatus.FAILED,
+            boolean testsPassed = response.testsPassed() != null ? response.testsPassed() : response.success();
+            step(ticketId, "testing", testsPassed ? AgentStepStatus.DONE : AgentStepStatus.FAILED,
                     "Tests (attempts=" + response.attempts() + "): " + response.testOutput());
 
             if (response.success()) {
@@ -110,5 +112,13 @@ public class AgentService {
                 .message(message)
                 .build());
         publisher.publish(ticketId, step);
+    }
+
+    private String issueDescription(Ticket ticket) {
+        return java.util.Objects.toString(ticket.getDescription(), "")
+                + "\n\nReproduction steps:\n" + java.util.Objects.toString(ticket.getReproductionSteps(), "Not provided")
+                + "\n\nExpected behavior:\n" + java.util.Objects.toString(ticket.getExpectedBehavior(), "Not provided")
+                + "\n\nActual behavior:\n" + java.util.Objects.toString(ticket.getActualBehavior(), "Not provided")
+                + "\n\nSeverity: " + ticket.getSeverity();
     }
 }

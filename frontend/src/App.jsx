@@ -3,11 +3,15 @@ import { Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Login from "./pages/Login.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import RepoDetail from "./pages/RepoDetail.jsx";
 import TicketDetail from "./pages/TicketDetail.jsx";
 import AgentLiveView from "./pages/AgentLiveView.jsx";
 import DiffAndPr from "./pages/DiffAndPr.jsx";
+import WorkspaceDetail from "./pages/WorkspaceDetail.jsx";
+import ProjectDetail from "./pages/ProjectDetail.jsx";
+import AcceptInvitation from "./pages/AcceptInvitation.jsx";
 
 export default function App() {
   return (
@@ -16,6 +20,10 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/invitations" element={<AcceptInvitation />} />
+          <Route path="/workspaces/:id" element={<ProtectedRoute><WorkspaceDetail /></ProtectedRoute>} />
+          <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
           <Route
             path="/"
             element={

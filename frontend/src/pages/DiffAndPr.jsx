@@ -67,7 +67,7 @@ export default function DiffAndPr() {
           </a>
         ) : (
           <span className="text-sm text-slate-400">
-            {ticket.status === "FAILED" ? "Tests failed — no PR created" : "Not created yet"}
+            {ticket.status === "FAILED" ? "Run failed — no PR created. Review the ticket error." : "Not created yet"}
           </span>
         )}
       </section>

@@ -14,8 +14,9 @@ from typing import Optional
 from agents.bug_catalog import test_filter_for
 from agents.coding_agent import apply_fix
 from agents.test_agent import run_tests
-from config import MAX_TEST_RETRIES, MOCK_LLM
+from config import MAX_TEST_RETRIES, MOCK_LLM, TEST_RUNNER
 from tools import git_tools, github_tools
+from tools.actions_runner import run_github_tests
 
 
 @dataclass
@@ -49,10 +50,28 @@ def run_implement_workflow(
     # bugs at once, so scope the run to just this issue's test(s) — a real coding agent
     # working a single ticket shouldn't be blocked by unrelated failing tests either.
     test_filter = test_filter_for(issue_text) if MOCK_LLM else None
+    remote = TEST_RUNNER == "github_actions"
+    if remote and (not owner or not repo_name or not github_token):
+        result.failure_reason = "Remote tests require a connected GitHub repository and token."
+        return result
+    git_tools.create_branch(repo_path, branch_name)
 
     for attempt in range(1, MAX_TEST_RETRIES + 1):
         edited_files = apply_fix(repo_path, issue_text, plan, relevant_files, feedback)
-        passed, output = run_tests(repo_path, test_filter=test_filter)
+        if attempt == 1 and not edited_files:
+            result.failure_reason = "The coding agent did not produce any changes. Review the plan and retry."
+            return result
+        if remote:
+            if edited_files:
+                git_tools.commit_all(repo_path, f"Fix issue #{issue_number} (attempt {attempt})", paths=edited_files)
+            if not git_tools.push_branch(repo_path, clone_url, branch_name, token=github_token):
+                result.failure_reason = "Could not publish the candidate commit for remote tests."
+                return result
+            import git
+            sha = git.Repo(repo_path).head.commit.hexsha
+            passed, output = run_github_tests(f"{owner}/{repo_name}", sha, github_token, test_filter)
+        else:
+            passed, output = run_tests(repo_path, test_filter=test_filter)
         result.attempts = attempt
         result.test_output = output
 
@@ -63,15 +82,29 @@ def run_implement_workflow(
         feedback = output  # fed into the next apply_fix call as failure context
 
     if not result.test_passed:
+        if remote:
+            result.diff = git_tools.diff_against(repo_path, base_branch)
         result.failure_reason = f"Tests still failing after {result.attempts} attempt(s)"
         return result
 
-    git_tools.create_branch(repo_path, branch_name)
-    result.diff = git_tools.commit_all(
-        repo_path, f"Fix issue #{issue_number} via AI agent", paths=edited_files
-    )
+    if remote:
+        result.diff = git_tools.diff_against(repo_path, base_branch)
+    else:
+        result.diff = git_tools.commit_all(
+            repo_path, f"Fix issue #{issue_number} via AI agent", paths=edited_files
+        )
+    if not result.diff.strip():
+        result.failure_reason = "No code changes were produced; no pull request was created."
+        result.test_passed = False
+        return result
 
-    pushed = git_tools.push_branch(repo_path, clone_url, branch_name, token=github_token)
+    try:
+        pushed = git_tools.push_branch(repo_path, clone_url, branch_name, token=github_token)
+    except git_tools.GitHubAccessError as exc:
+        # Tests passed, but publication failed. Return the diff and test output so
+        # the developer can still review the candidate instead of losing both.
+        result.failure_reason = str(exc)
+        return result
     if pushed and owner and repo_name:
         result.pr_url = github_tools.create_pull_request(
             owner,

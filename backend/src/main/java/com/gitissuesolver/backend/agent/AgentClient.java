@@ -22,13 +22,15 @@ public class AgentClient {
 
     private final RestClient restClient;
 
-    public AgentClient(@Value("${ai.service.url}") String baseUrl) {
+    public AgentClient(@Value("${ai.service.url}") String baseUrl,
+                       @Value("${ai.service.token:}") String serviceToken) {
         // uvicorn (plain HTTP/1.1) doesn't understand the JDK HttpClient's default
         // "Upgrade: h2c" cleartext-HTTP/2 negotiation attempt — it silently drops the
         // request body, so pydantic sees an empty body. Force HTTP/1.1 to avoid it.
         HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .defaultHeaders(headers -> { if (!serviceToken.isBlank()) headers.setBearerAuth(serviceToken); })
                 .requestFactory(new JdkClientHttpRequestFactory(httpClient))
                 .build();
     }

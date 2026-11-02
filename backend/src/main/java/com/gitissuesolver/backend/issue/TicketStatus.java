@@ -8,6 +8,7 @@ public enum TicketStatus {
     IMPLEMENTING,
     TESTING,
     PR_CREATED,
+    AWAITING_QA,
     RESOLVED,
     FAILED
 }

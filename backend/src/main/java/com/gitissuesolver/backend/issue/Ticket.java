@@ -27,11 +27,31 @@ public class Ticket {
     @Column(name = "github_issue_number", nullable = false)
     private Integer githubIssueNumber;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean githubPullRequest = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean githubIssueClosed = false;
+
     @Column(nullable = false, length = 500)
     private String title;
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(columnDefinition = "TEXT") private String reproductionSteps;
+    @Column(columnDefinition = "TEXT") private String expectedBehavior;
+    @Column(columnDefinition = "TEXT") private String actualBehavior;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
+    @Builder.Default private Priority priority = Priority.MEDIUM;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
+    @Builder.Default private Severity severity = Severity.MEDIUM;
+    private Long qaVerifiedBy;
+    private Instant qaVerifiedAt;
+    @Column(columnDefinition = "TEXT") private String qaNotes;
+    @Column(nullable = false) @Builder.Default private boolean qaReopened = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)

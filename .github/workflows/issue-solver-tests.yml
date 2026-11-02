@@ -1,0 +1,114 @@
+name: Issue Solver tests
+run-name: Issue Solver tests ${{ inputs.job_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact candidate commit to test
+        required: true
+        type: string
+      job_id:
+        description: Unique Issue Solver request ID
+        required: true
+        type: string
+      test_filter:
+        description: Optional Class or Class#method+method filter
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: gitissuesolver_test
+          POSTGRES_USER: gitissuesolver
+          POSTGRES_PASSWORD: gitissuesolver
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U gitissuesolver -d gitissuesolver_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Test the candidate revision
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          JOB_ID: ${{ inputs.job_id }}
+          TEST_FILTER: ${{ inputs.test_filter }}
+          TEST_DATABASE_URL: jdbc:postgresql://localhost:5433/gitissuesolver_test
+          TEST_DATABASE_USERNAME: gitissuesolver
+          TEST_DATABASE_PASSWORD: gitissuesolver
+        shell: python
+        run: |
+          import json, os, re, shlex, subprocess
+          from pathlib import Path
+          root = Path.cwd()
+          sha, job_id = os.environ['CANDIDATE_SHA'], os.environ['JOB_ID']
+          result = {'sha': sha, 'job_id': job_id, 'passed': False, 'output': ''}
+          try:
+              if not re.fullmatch(r'[a-f0-9]{40}', sha) or not re.fullmatch(r'[a-f0-9-]{36}', job_id):
+                  raise ValueError('Invalid job ID or candidate revision')
+              actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+              if actual != sha:
+                  raise ValueError('Checked-out revision does not match the candidate')
+              project, tool, level = None, None, [root]
+              for depth in range(4):
+                  following = []
+                  for directory in level:
+                      if (directory / 'pom.xml').is_file():
+                          project, tool = directory, 'maven'
+                          break
+                      if any((directory / f).is_file() for f in ('settings.gradle', 'settings.gradle.kts', 'build.gradle', 'build.gradle.kts')):
+                          project, tool = directory, 'gradle'
+                          break
+                      if depth < 3:
+                          following.extend(p for p in sorted(directory.iterdir()) if p.is_dir() and not p.is_symlink()
+                              and not p.name.startswith('.') and p.name not in {'target', 'build', 'buildSrc', 'node_modules', 'venv', 'dist'})
+                  if project:
+                      break
+                  level = following
+              if project is None:
+                  raise ValueError('No Maven or Gradle build found within three directory levels')
+              wrapper = project / ('mvnw' if tool == 'maven' else 'gradlew')
+              cmd = ([str(wrapper)] if os.access(wrapper, os.X_OK) else ['sh', str(wrapper)]) if wrapper.is_file() else ['mvn' if tool == 'maven' else 'gradle']
+              cmd += ['-B', '-q', 'test'] if tool == 'maven' else ['--no-daemon', '--console=plain', 'test']
+              selected = os.environ.get('TEST_FILTER', '')
+              if selected:
+                  if tool == 'maven':
+                      cmd += ['-Dtest=' + selected]
+                  else:
+                      for selector in selected.split(','):
+                          cls, sep, methods = selector.strip().partition('#')
+                          for pattern in ([cls + '.' + m.strip() for m in methods.split('+') if m.strip()] if sep else [cls]):
+                              cmd += ['--tests', pattern]
+              allowed = {'PATH', 'JAVA_HOME', 'HOME', 'LANG', 'TMPDIR', 'CI', 'TEST_DATABASE_URL', 'TEST_DATABASE_USERNAME', 'TEST_DATABASE_PASSWORD'}
+              environment = {key: value for key, value in os.environ.items() if key in allowed}
+              completed = subprocess.run(cmd, cwd=project, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300, env=environment)
+              result['passed'] = completed.returncode == 0
+              result['output'] = f'[{tool} ran in: {project.relative_to(root)}]\n[command: {shlex.join(cmd)}]\n' + (completed.stdout + completed.stderr)[-8000:]
+          except Exception as exc:
+              result['output'] = str(exc)[-8000:]
+          Path('issue-solver-result.json').write_text(json.dumps(result), encoding='utf-8')
+          print(result['output'])
+          raise SystemExit(0 if result['passed'] else 1)
+      - name: Return test result
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: issue-solver-${{ inputs.job_id }}
+          path: issue-solver-result.json
+          if-no-files-found: error
+          retention-days: 1
