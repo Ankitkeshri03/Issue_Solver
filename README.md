@@ -257,14 +257,3 @@ Both were only visible by actually running the full loop, not from reading the c
    understand it and silently dropped the request body, so every backend→AI-service call
    landed as an empty body (`422 Field required`). Fixed by forcing
    `HttpClient.Version.HTTP_1_1` in `AgentClient`.
-
-## What's not done
-
-- No measured fix-accuracy percentage, retrieval benchmark, or guarantee of complete
-  issue coverage. Targeted tests and human code/QA review are still needed.
-- The app does not merge PRs or close GitHub issues. GitHub state is refreshed from
-  the repository page; QA verification is a separate action inside the app.
-- Automated mail tests use fakes; real inbox delivery is not established by those tests.
-- Docker builds for `backend` and `ai-service` images are written but not run.
-- Automatic priority prediction, evaluation metrics, cost tracking, execution
-  sandboxing and other source languages remain future work in the roadmap.
